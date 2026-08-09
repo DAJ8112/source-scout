@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -7,7 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.db import engine as app_engine
 from app.db import get_session
 from app.main import create_app
-from app.models import Base, ScanRun
+from app.models import Base, CareersSource, Job, ScanRun
 
 
 def test_source_crud_and_concurrent_scan_rejection(tmp_path):
@@ -62,3 +63,49 @@ def test_jobs_pagination_returns_404_for_unknown_scan(tmp_path):
     app.dependency_overrides[get_session] = override_session
     with TestClient(app) as client:
         assert client.get("/api/scans/not-found/jobs").status_code == 404
+
+
+def test_current_jobs_can_be_filtered_and_read(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'api3.db'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    now = datetime.now(UTC)
+    with factory() as session:
+        source = CareersSource(company="Example", url="https://example.com/careers")
+        session.add(source)
+        session.flush()
+        job = Job(
+            source_id=source.id,
+            identity_key="external:R1",
+            external_id="R1",
+            canonical_url="https://example.com/jobs/R1",
+            title="Data Engineer",
+            locations=["Remote"],
+            employment_type="FULL_TIME",
+            posted_date=None,
+            description_html=None,
+            description_text="Build pipelines",
+            content_fingerprint="a" * 64,
+            raw_metadata={},
+            lifecycle_status="active",
+            consecutive_successful_absences=0,
+            initial_import=True,
+            first_discovered_at=now,
+            last_observed_at=now,
+        )
+        session.add(job)
+        session.commit()
+
+    def override_session():
+        with factory() as session:
+            yield session
+
+    app = create_app()
+    app.dependency_overrides[get_session] = override_session
+    with TestClient(app) as client:
+        response = client.get(f"/api/jobs?source_id={source.id}&lifecycle_status=active")
+        assert response.status_code == 200
+        assert response.json()["total"] == 1
+        assert response.json()["items"][0]["title"] == "Data Engineer"
+        assert client.get(f"/api/jobs/{job.id}").json()["initial_import"] is True
+        assert client.get("/api/jobs?lifecycle_status=invalid").status_code == 422

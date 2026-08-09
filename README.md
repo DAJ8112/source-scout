@@ -1,10 +1,15 @@
 # Referral Job Monitor — Connector Lab
 
-Milestone 1 is a local FastAPI + React application that validates and scans the
-three initial official careers sources, persists immutable scan observations in
-SQLite, and exposes actionable connector diagnostics. Matching, resumes, job
-lifecycle, authentication, scheduling, durable queues, and deployment are
-intentionally out of scope.
+The current foundation is a local FastAPI + React application that validates and
+scans the three initial official careers sources, persists immutable scan
+observations in SQLite, and exposes actionable connector diagnostics. Successful
+scans also reconcile durable jobs: the first import is labeled separately, content
+changes are detected, one successful absence marks a job possibly closed, and two
+successful absences close it. Failed scans never advance job lifecycle state.
+
+Profile and resume management, referral contacts, matching, the product feed,
+authentication, scheduling, durable queues, and hosted deployment are the next MVP
+layers and are not implemented yet.
 
 ## Prerequisites
 
@@ -47,4 +52,3 @@ REFERRALS_LIVE_TESTS=1 uv run pytest -m live -q
 Live tests assert successful nonzero traversal, never volatile exact counts.
 Sites can change or restrict automated access; a blocked or drifted source is
 reported as `setup_required` with diagnostics rather than bypassed.
-

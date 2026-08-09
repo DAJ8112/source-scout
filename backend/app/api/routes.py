@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
@@ -11,8 +12,10 @@ from sqlalchemy.orm import Session
 from app.connectors.errors import ConnectorError
 from app.connectors.registry import ConnectorRegistry
 from app.db import get_session
-from app.models import CareersSource, JobObservation, ScanRun
+from app.models import CareersSource, Job, JobObservation, ScanRun
 from app.schemas import (
+    CurrentJobRead,
+    CurrentJobsPage,
     JobRead,
     JobsPage,
     ScanCreate,
@@ -208,3 +211,40 @@ def get_scan_jobs(
         page_size=page_size,
         total=total,
     )
+
+
+@router.get("/jobs", response_model=CurrentJobsPage)
+def list_jobs(
+    source_id: str | None = None,
+    lifecycle_status: Literal["active", "possibly_closed", "closed"] | None = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    session: Session = Depends(get_session),
+) -> CurrentJobsPage:
+    filters = []
+    if source_id:
+        filters.append(Job.source_id == source_id)
+    if lifecycle_status:
+        filters.append(Job.lifecycle_status == lifecycle_status)
+    total = session.scalar(select(func.count()).select_from(Job).where(*filters)) or 0
+    jobs = session.scalars(
+        select(Job)
+        .where(*filters)
+        .order_by(Job.first_discovered_at.desc(), Job.id)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    return CurrentJobsPage(
+        items=[CurrentJobRead.model_validate(job) for job in jobs],
+        page=page,
+        page_size=page_size,
+        total=total,
+    )
+
+
+@router.get("/jobs/{job_id}", response_model=CurrentJobRead)
+def get_job(job_id: str, session: Session = Depends(get_session)) -> Job:
+    job = session.get(Job, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job

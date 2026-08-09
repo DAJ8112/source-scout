@@ -8,9 +8,33 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.connectors.errors import ConnectorError
 from app.connectors.registry import ConnectorRegistry
-from app.models import CareersSource, JobObservation, ScanRun
+from app.connectors.types import NormalizedJob
+from app.models import CareersSource, Job, JobObservation, ScanRun
 
 logger = logging.getLogger(__name__)
+
+
+def job_identity_key(job: NormalizedJob) -> str:
+    if job.external_id:
+        return f"external:{job.external_id.strip()}"
+    return f"url:{job.canonical_url}"
+
+
+def apply_observation(job: Job, observed: NormalizedJob, observed_at: datetime) -> None:
+    job.identity_key = job_identity_key(observed)
+    job.external_id = observed.external_id
+    job.canonical_url = observed.canonical_url
+    job.title = observed.title
+    job.locations = observed.locations
+    job.employment_type = observed.employment_type
+    job.posted_date = observed.posted_date
+    job.description_html = observed.description_html
+    job.description_text = observed.description_text
+    job.content_fingerprint = observed.content_fingerprint
+    job.raw_metadata = observed.raw_metadata
+    job.lifecycle_status = "active"
+    job.consecutive_successful_absences = 0
+    job.last_observed_at = observed_at
 
 
 def recover_interrupted_runs(session: Session) -> int:
@@ -53,27 +77,82 @@ async def execute_scan(scan_id: str, app) -> None:
                 source.connector_type or "", source.detected_platform
             )
             output = await connector.scan(source.url, source.connector_config)
-            unique_jobs = {job.canonical_url: job for job in output.jobs}
+            unique_jobs = {job_identity_key(job): job for job in output.jobs}
             scan.jobs_found = len(output.jobs)
             scan.pages_visited = output.pages_visited
             scan.warnings = output.warnings
             scan.progress = {"phase": "persisting", "current": 0, "total": len(unique_jobs)}
             session.commit()
-            for index, job in enumerate(unique_jobs.values(), start=1):
+
+            observed_at = datetime.now(UTC)
+            first_successful_scan = (
+                session.scalar(
+                    select(ScanRun.id)
+                    .where(
+                        ScanRun.source_id == source.id,
+                        ScanRun.id != scan.id,
+                        ScanRun.status.in_(["success", "success_with_warnings"]),
+                    )
+                    .limit(1)
+                )
+                is None
+            )
+            current_jobs = list(session.scalars(select(Job).where(Job.source_id == source.id)))
+            by_identity = {job.identity_key: job for job in current_jobs}
+            by_url = {job.canonical_url: job for job in current_jobs}
+            observed_job_ids: set[str] = set()
+
+            for index, observed in enumerate(unique_jobs.values(), start=1):
+                identity_key = job_identity_key(observed)
+                job = by_identity.get(identity_key) or by_url.get(observed.canonical_url)
+                if job is None:
+                    job = Job(
+                        source_id=source.id,
+                        identity_key=identity_key,
+                        external_id=observed.external_id,
+                        canonical_url=observed.canonical_url,
+                        title=observed.title,
+                        locations=observed.locations,
+                        employment_type=observed.employment_type,
+                        posted_date=observed.posted_date,
+                        description_html=observed.description_html,
+                        description_text=observed.description_text,
+                        content_fingerprint=observed.content_fingerprint,
+                        raw_metadata=observed.raw_metadata,
+                        lifecycle_status="active",
+                        consecutive_successful_absences=0,
+                        initial_import=first_successful_scan,
+                        first_discovered_at=observed_at,
+                        last_observed_at=observed_at,
+                    )
+                    session.add(job)
+                    session.flush()
+                    current_jobs.append(job)
+                    scan.jobs_created += 1
+                else:
+                    if job.content_fingerprint != observed.content_fingerprint:
+                        scan.jobs_updated += 1
+                    apply_observation(job, observed, observed_at)
+
+                by_identity[job.identity_key] = job
+                by_url[job.canonical_url] = job
+                observed_job_ids.add(job.id)
                 session.add(
                     JobObservation(
                         scan_run_id=scan.id,
                         source_id=source.id,
-                        external_id=job.external_id,
-                        canonical_url=job.canonical_url,
-                        title=job.title,
-                        locations=job.locations,
-                        employment_type=job.employment_type,
-                        posted_date=job.posted_date,
-                        description_html=job.description_html,
-                        description_text=job.description_text,
-                        content_fingerprint=job.content_fingerprint,
-                        raw_metadata=job.raw_metadata,
+                        job_id=job.id,
+                        external_id=observed.external_id,
+                        canonical_url=observed.canonical_url,
+                        title=observed.title,
+                        locations=observed.locations,
+                        employment_type=observed.employment_type,
+                        posted_date=observed.posted_date,
+                        description_html=observed.description_html,
+                        description_text=observed.description_text,
+                        content_fingerprint=observed.content_fingerprint,
+                        raw_metadata=observed.raw_metadata,
+                        observed_at=observed_at,
                     )
                 )
                 if index % 50 == 0:
@@ -82,7 +161,17 @@ async def execute_scan(scan_id: str, app) -> None:
                         "current": index,
                         "total": len(unique_jobs),
                     }
-                    session.commit()
+                    session.flush()
+
+            for job in current_jobs:
+                if job.id in observed_job_ids or job.lifecycle_status == "closed":
+                    continue
+                job.consecutive_successful_absences += 1
+                job.lifecycle_status = (
+                    "closed" if job.consecutive_successful_absences >= 2 else "possibly_closed"
+                )
+                scan.jobs_missing += 1
+
             scan.jobs_persisted = len(unique_jobs)
             scan.status = "success_with_warnings" if output.warnings else "success"
             scan.progress = {

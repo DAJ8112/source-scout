@@ -71,6 +71,9 @@ class ScanRead(BaseModel):
     progress: dict[str, Any]
     jobs_found: int
     jobs_persisted: int
+    jobs_created: int
+    jobs_updated: int
+    jobs_missing: int
     pages_visited: int
     warnings: list[Any]
     error_code: str | None
@@ -98,6 +101,37 @@ class JobRead(BaseModel):
 
 class JobsPage(BaseModel):
     items: list[JobRead]
+    page: int
+    page_size: int
+    total: int
+
+
+class CurrentJobRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    source_id: str
+    external_id: str | None
+    canonical_url: str
+    title: str
+    locations: list[str]
+    employment_type: str | None
+    posted_date: date | None
+    description_html: str | None
+    description_text: str | None
+    content_fingerprint: str
+    raw_metadata: dict[str, Any]
+    lifecycle_status: str
+    consecutive_successful_absences: int
+    initial_import: bool
+    first_discovered_at: datetime
+    last_observed_at: datetime
+    created_at: datetime
+    updated_at: datetime
+
+
+class CurrentJobsPage(BaseModel):
+    items: list[CurrentJobRead]
     page: int
     page_size: int
     total: int

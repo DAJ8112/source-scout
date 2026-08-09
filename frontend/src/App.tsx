@@ -125,6 +125,11 @@ function SourceCard({ source, onChange }: { source: Source; onChange: (source: S
         <section className="scan" aria-live="polite">
           <strong>Scan: {scan.status.replaceAll("_", " ")}</strong>
           <span>{scan.jobs_persisted} jobs · {scan.pages_visited} pages</span>
+          {TERMINAL.has(scan.status) && !scan.error_code && (
+            <small>
+              {scan.jobs_created} created · {scan.jobs_updated} changed · {scan.jobs_missing} missing
+            </small>
+          )}
           {scan.error_code && <div role="alert" className="notice error">{scan.error_diagnostics.message ?? scan.error_code}</div>}
           {scan.warnings.length > 0 && <small>{scan.warnings.length} diagnostic warning(s)</small>}
         </section>

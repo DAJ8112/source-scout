@@ -108,6 +108,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Jobs */
+        get: operations["list_jobs_api_jobs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Job */
+        get: operations["get_job_api_jobs__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -129,6 +163,72 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** CurrentJobRead */
+        CurrentJobRead: {
+            /** Id */
+            id: string;
+            /** Source Id */
+            source_id: string;
+            /** External Id */
+            external_id: string | null;
+            /** Canonical Url */
+            canonical_url: string;
+            /** Title */
+            title: string;
+            /** Locations */
+            locations: string[];
+            /** Employment Type */
+            employment_type: string | null;
+            /** Posted Date */
+            posted_date: string | null;
+            /** Description Html */
+            description_html: string | null;
+            /** Description Text */
+            description_text: string | null;
+            /** Content Fingerprint */
+            content_fingerprint: string;
+            /** Raw Metadata */
+            raw_metadata: {
+                [key: string]: unknown;
+            };
+            /** Lifecycle Status */
+            lifecycle_status: string;
+            /** Consecutive Successful Absences */
+            consecutive_successful_absences: number;
+            /** Initial Import */
+            initial_import: boolean;
+            /**
+             * First Discovered At
+             * Format: date-time
+             */
+            first_discovered_at: string;
+            /**
+             * Last Observed At
+             * Format: date-time
+             */
+            last_observed_at: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** CurrentJobsPage */
+        CurrentJobsPage: {
+            /** Items */
+            items: components["schemas"]["CurrentJobRead"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total */
+            total: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -216,6 +316,12 @@ export interface components {
             jobs_found: number;
             /** Jobs Persisted */
             jobs_persisted: number;
+            /** Jobs Created */
+            jobs_created: number;
+            /** Jobs Updated */
+            jobs_updated: number;
+            /** Jobs Missing */
+            jobs_missing: number;
             /** Pages Visited */
             pages_visited: number;
             /** Warnings */
@@ -578,6 +684,71 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobsPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_jobs_api_jobs_get: {
+        parameters: {
+            query?: {
+                source_id?: string | null;
+                lifecycle_status?: ("active" | "possibly_closed" | "closed") | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentJobsPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_job_api_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentJobRead"];
                 };
             };
             /** @description Validation Error */

@@ -38,8 +38,8 @@ test("onboards and validates a source with facet selection", async () => {
 test("polls a scan, renders normalized results, and presents failures", async () => {
   vi.spyOn(globalThis, "fetch")
     .mockImplementationOnce(() => response([source]))
-    .mockImplementationOnce(() => response({ id: "scan-1", source_id: source.id, trigger: "manual", status: "queued", created_at: "", started_at: null, finished_at: null, progress: {}, jobs_found: 0, jobs_persisted: 0, pages_visited: 0, warnings: [], error_code: null, error_diagnostics: {} }, 202))
-    .mockImplementationOnce(() => response({ id: "scan-1", source_id: source.id, trigger: "manual", status: "success", created_at: "", started_at: "", finished_at: "", progress: {}, jobs_found: 1, jobs_persisted: 1, pages_visited: 2, warnings: [], error_code: null, error_diagnostics: {} }))
+    .mockImplementationOnce(() => response({ id: "scan-1", source_id: source.id, trigger: "manual", status: "queued", created_at: "", started_at: null, finished_at: null, progress: {}, jobs_found: 0, jobs_persisted: 0, jobs_created: 0, jobs_updated: 0, jobs_missing: 0, pages_visited: 0, warnings: [], error_code: null, error_diagnostics: {} }, 202))
+    .mockImplementationOnce(() => response({ id: "scan-1", source_id: source.id, trigger: "manual", status: "success", created_at: "", started_at: "", finished_at: "", progress: {}, jobs_found: 1, jobs_persisted: 1, jobs_created: 1, jobs_updated: 0, jobs_missing: 0, pages_visited: 2, warnings: [], error_code: null, error_diagnostics: {} }))
     .mockImplementationOnce(() => response({ items: [{ id: "job-1", scan_run_id: "scan-1", source_id: source.id, external_id: "R1", canonical_url: "https://example.com/job/1", title: "Data Engineer", locations: ["Remote"], employment_type: "FULL_TIME", posted_date: null, description_html: null, description_text: null, content_fingerprint: "abc", raw_metadata: {}, observed_at: "" }], page: 1, page_size: 25, total: 1 }));
   render(<App />);
   const user = userEvent.setup();
@@ -47,6 +47,7 @@ test("polls a scan, renders normalized results, and presents failures", async ()
   await user.click(screen.getByRole("button", { name: "Scan now" }));
   expect(await screen.findByText("Data Engineer", {}, { timeout: 2000 })).toBeInTheDocument();
   expect(screen.getByText("Remote")).toBeInTheDocument();
+  expect(screen.getByText("1 created · 0 changed · 0 missing")).toBeInTheDocument();
   await waitFor(() => expect(screen.getByText("Scan: success")).toBeInTheDocument());
 });
 
@@ -61,4 +62,3 @@ test("shows API errors during onboarding", async () => {
   await user.click(screen.getByRole("button", { name: "Add source" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("already exists");
 });
-
