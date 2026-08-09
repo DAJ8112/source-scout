@@ -93,8 +93,8 @@ web service. Persistent state lives in Neon Postgres, while GitHub Actions wakes
 run-to-completion worker every six hours. Anthropic remains optional; leave its key
 unset to use deterministic local matching without API charges.
 
-1. Create a Neon project in an Ohio-compatible region and copy its pooled connection
-   string.
+1. Create a Neon project in AWS Ohio and copy its direct connection string. Keep
+   connection pooling disabled because the same URL is used for Alembic migrations.
 2. Add that connection string as a GitHub repository secret named `DATABASE_URL`.
 3. Merge the deployment checkpoint into the repository's default branch. GitHub runs
    scheduled workflows only from the default branch.
