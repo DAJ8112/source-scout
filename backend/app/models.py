@@ -13,6 +13,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -43,6 +44,10 @@ class CareersSource(Base):
     health_status: Mapped[str] = mapped_column(String(30), default="unknown")
     last_validation_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_validation: Mapped[dict] = mapped_column(JSON, default=dict)
+    monitoring_status: Mapped[str] = mapped_column(String(20), default="active")
+    next_scan_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    last_scan_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_successful_scan_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=now_utc, onupdate=now_utc
@@ -57,6 +62,8 @@ class CareersSource(Base):
     contacts: Mapped[list[ReferralContact]] = relationship(
         back_populates="source", cascade="all, delete-orphan", order_by="ReferralContact.name"
     )
+
+    __table_args__ = (Index("ix_source_monitoring_due", "monitoring_status", "next_scan_at"),)
 
 
 class ReferralContact(Base):
@@ -103,7 +110,16 @@ class ScanRun(Base):
         back_populates="scan", cascade="all, delete-orphan"
     )
 
-    __table_args__ = (Index("ix_scan_source_status", "source_id", "status"),)
+    __table_args__ = (
+        Index("ix_scan_source_status", "source_id", "status"),
+        Index(
+            "uq_scan_source_unfinished",
+            "source_id",
+            unique=True,
+            sqlite_where=text("status IN ('queued', 'running')"),
+            postgresql_where=text("status IN ('queued', 'running')"),
+        ),
+    )
 
 
 class SearchProfile(Base):

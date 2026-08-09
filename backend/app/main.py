@@ -11,7 +11,6 @@ from app.config import settings
 from app.connectors.http import SafeHttpClient
 from app.db import SessionLocal
 from app.services.matching import HybridMatcher
-from app.services.scans import recover_interrupted_runs
 
 
 @asynccontextmanager
@@ -19,13 +18,7 @@ async def lifespan(app: FastAPI):
     app.state.session_factory = SessionLocal
     app.state.http = SafeHttpClient()
     app.state.matcher = HybridMatcher(settings)
-    app.state.scan_tasks = {}
-    with app.state.session_factory() as session:
-        recover_interrupted_runs(session)
     yield
-    tasks = list(app.state.scan_tasks.values())
-    for task in tasks:
-        task.cancel()
     await app.state.http.close()
     await app.state.matcher.close()
 

@@ -111,6 +111,8 @@ def test_concurrent_scan_detection_and_interrupted_recovery(tmp_path):
     source_id, scan_id = source_and_scan(factory)
     with factory() as session:
         assert unfinished_scan_for_source(session, source_id).id == scan_id
+        session.get(ScanRun, scan_id).status = "running"
+        session.commit()
         changed = recover_interrupted_runs(session)
         assert changed == 1
         recovered = session.get(ScanRun, scan_id)
@@ -226,7 +228,8 @@ async def test_jobs_discovered_after_initial_scan_are_not_initial_imports(tmp_pa
 
     monkeypatch.setattr("app.services.scans.ConnectorRegistry.get", lambda *_args: FakeConnector())
     app = SimpleNamespace(state=SimpleNamespace(session_factory=factory, http=None, scan_tasks={}))
-    for scan_id in [first_scan_id, queued_scan(factory, source_id)]:
+    for index in range(2):
+        scan_id = first_scan_id if index == 0 else queued_scan(factory, source_id)
         app.state.scan_tasks[scan_id] = object()
         await execute_scan(scan_id, app)
 

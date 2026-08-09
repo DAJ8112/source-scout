@@ -16,6 +16,9 @@ dependencies = [
   "uvicorn[standard]>=0.35,<1",
 ]
 
+[project.scripts]
+referrals-worker = "app.worker:main"
+
 [dependency-groups]
 dev = [
   "pytest>=8.4,<10",

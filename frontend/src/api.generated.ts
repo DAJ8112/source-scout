@@ -698,6 +698,8 @@ export interface components {
             connector_config?: {
                 [key: string]: unknown;
             } | null;
+            /** Monitoring Status */
+            monitoring_status?: ("active" | "paused") | null;
         };
         /** SourceRead */
         SourceRead: {
@@ -729,6 +731,17 @@ export interface components {
             last_validation: {
                 [key: string]: unknown;
             };
+            /** Monitoring Status */
+            monitoring_status: string;
+            /**
+             * Next Scan At
+             * Format: date-time
+             */
+            next_scan_at: string;
+            /** Last Scan Attempt At */
+            last_scan_attempt_at: string | null;
+            /** Last Successful Scan At */
+            last_successful_scan_at: string | null;
             /** Contacts */
             contacts: components["schemas"]["ReferralContactRead"][];
             /**

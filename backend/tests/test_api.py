@@ -41,6 +41,14 @@ def test_source_crud_and_concurrent_scan_rejection(tmp_path):
         assert client.get("/api/sources").json()[0]["id"] == source["id"]
         patched = client.patch(f"/api/sources/{source['id']}", json={"company": "CVS"})
         assert patched.json()["company"] == "CVS"
+        paused = client.patch(
+            f"/api/sources/{source['id']}", json={"monitoring_status": "paused"}
+        )
+        assert paused.json()["monitoring_status"] == "paused"
+        resumed = client.patch(
+            f"/api/sources/{source['id']}", json={"monitoring_status": "active"}
+        )
+        assert resumed.json()["monitoring_status"] == "active"
         assert client.patch(f"/api/sources/{source['id']}", json={"company": None}).status_code == 422
         with factory() as session:
             session.add(ScanRun(source_id=source["id"], trigger="manual", status="running"))

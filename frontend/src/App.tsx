@@ -24,6 +24,10 @@ function splitList(value: string): string[] {
   return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
+function formatTime(value: string | null): string {
+  return value ? new Date(value).toLocaleString() : "Not yet";
+}
+
 function ProfilePanel({
   profile,
   busy,
@@ -151,7 +155,9 @@ function SourceCard({
       ? selected.filter((item) => item.id !== facet.id)
       : [...selected, facet];
     try {
-      onChange(await api.patchSource(source.id, { ...source.connector_config, selected_facets }));
+      onChange(await api.patchSource(source.id, {
+        connector_config: { ...source.connector_config, selected_facets },
+      }));
     } catch (reason) {
       setError(messageOf(reason));
     }
@@ -163,6 +169,17 @@ function SourceCard({
     try {
       const created = await api.createScan(source.id);
       setScan(created);
+    } catch (reason) {
+      setError(messageOf(reason));
+    }
+  }
+
+  async function toggleMonitoring() {
+    setError("");
+    try {
+      onChange(await api.patchSource(source.id, {
+        monitoring_status: source.monitoring_status === "active" ? "paused" : "active",
+      }));
     } catch (reason) {
       setError(messageOf(reason));
     }
@@ -181,7 +198,7 @@ function SourceCard({
       } catch (reason) {
         setError(messageOf(reason));
       }
-    }, 100);
+    }, 1000);
     return () => window.clearTimeout(timer);
   }, [onScanComplete, scan]);
 
@@ -229,6 +246,9 @@ function SourceCard({
         <div><dt>Platform</dt><dd>{source.detected_platform ?? "Undetected"}</dd></div>
         <div><dt>Connector</dt><dd>{source.connector_type ?? "Setup required"}</dd></div>
         <div><dt>Setup</dt><dd>{source.setup_status.replaceAll("_", " ")}</dd></div>
+        <div><dt>Monitoring</dt><dd>{source.monitoring_status}</dd></div>
+        <div><dt>Last success</dt><dd>{formatTime(source.last_successful_scan_at)}</dd></div>
+        <div><dt>Next scan</dt><dd>{source.monitoring_status === "paused" ? "Paused" : formatTime(source.next_scan_at)}</dd></div>
       </dl>
 
       {source.detected_platform === "workday" && selected.length > 0 && (
@@ -263,6 +283,7 @@ function SourceCard({
       <div className="actions">
         <button className="secondary" onClick={validate}>Validate source</button>
         <button onClick={beginScan} disabled={scan != null && !TERMINAL.has(scan.status)}>Scan now</button>
+        <button className="text-button" type="button" onClick={toggleMonitoring}>{source.monitoring_status === "active" ? "Pause monitoring" : "Resume monitoring"}</button>
       </div>
 
       {scan && (

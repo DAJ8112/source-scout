@@ -38,6 +38,7 @@ export type Source = Omit<
   detection: Record<string, unknown>;
   last_validation: ValidationResult | Record<string, never>;
 };
+export type SourcePatch = components["schemas"]["SourcePatch"];
 
 type GeneratedScan = components["schemas"]["ScanRead"];
 export type Scan = Omit<GeneratedScan, "progress" | "warnings" | "error_diagnostics"> & {

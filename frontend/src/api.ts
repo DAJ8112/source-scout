@@ -10,6 +10,7 @@ import type {
   SearchProfile,
   SearchProfilePatch,
   Source,
+  SourcePatch,
   ValidationResult,
 } from "./api.types";
 
@@ -43,10 +44,10 @@ export const api = {
   sources: () => request<Source[]>("/api/sources"),
   createSource: (company: string, url: string) =>
     request<Source>("/api/sources", { method: "POST", body: JSON.stringify({ company, url }) }),
-  patchSource: (id: string, connector_config: Record<string, unknown>) =>
+  patchSource: (id: string, payload: SourcePatch) =>
     request<Source>(`/api/sources/${id}`, {
       method: "PATCH",
-      body: JSON.stringify({ connector_config }),
+      body: JSON.stringify(payload),
     }),
   validateSource: (id: string) =>
     request<{ source: Source; validation: ValidationResult }>(`/api/sources/${id}/validate`, {

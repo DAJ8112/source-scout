@@ -14,7 +14,9 @@ Results are cached by profile version and job content. If Claude is unavailable 
 not configured, the app falls back to deterministic local scoring. Jobs can be marked
 viewed or dismissed, and dismissals remain reversible.
 
-Authentication, scheduling, durable queues, and hosted deployment are future layers.
+Scheduled monitoring uses the relational database as a durable queue. A separate worker
+claims due scans, runs them independently of the web process, and advances each active
+source's next scan by six hours. Authentication and hosted deployment are future layers.
 
 ## Prerequisites
 
@@ -41,7 +43,17 @@ uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
 ```
 
-In another terminal:
+In another terminal, run the durable scheduler and scan worker:
+
+```bash
+cd backend
+uv run referrals-worker
+```
+
+Run one worker process per database for this MVP. Queued work survives web or worker
+restarts; a scan left running for more than an hour is marked interrupted and requeued.
+
+In a third terminal:
 
 ```bash
 cd frontend

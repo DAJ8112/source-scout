@@ -37,6 +37,7 @@ class SourcePatch(BaseModel):
     company: str | None = Field(default=None, min_length=1, max_length=200)
     url: HttpUrl | None = None
     connector_config: dict[str, Any] | None = None
+    monitoring_status: Literal["active", "paused"] | None = None
 
     @field_validator("company")
     @classmethod
@@ -45,7 +46,7 @@ class SourcePatch(BaseModel):
             raise ValueError("company cannot be blank or null")
         return value.strip()
 
-    @field_validator("url", "connector_config")
+    @field_validator("url", "connector_config", "monitoring_status")
     @classmethod
     def reject_null_updates(cls, value: Any) -> Any:
         if value is None:
@@ -120,6 +121,10 @@ class SourceRead(BaseModel):
     health_status: str
     last_validation_at: datetime | None
     last_validation: dict[str, Any]
+    monitoring_status: str
+    next_scan_at: datetime
+    last_scan_attempt_at: datetime | None
+    last_successful_scan_at: datetime | None
     contacts: list[ReferralContactRead]
     created_at: datetime
     updated_at: datetime

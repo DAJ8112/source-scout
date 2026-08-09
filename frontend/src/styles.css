@@ -40,7 +40,7 @@ input[type="text"], input[type="url"], label > input:not([type]), select, textar
 .status { border-radius: 99px; padding: .35rem .7rem; background: #edf1ed; text-transform: capitalize; font-size: .75rem; font-weight: 700; }
 .status-healthy { background: #d7f2e5; color: #126442; }
 .status-setup_required, .status-temporarily_failing { background: #fde5da; color: #8a341c; }
-.metadata { display: grid; grid-template-columns: repeat(3, 1fr); background: #f5f7f3; border-radius: 12px; padding: .9rem; }
+.metadata { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: .7rem; background: #f5f7f3; border-radius: 12px; padding: .9rem; }
 .metadata div { display: grid; gap: .2rem; }
 .metadata dt { text-transform: uppercase; letter-spacing: .09em; font-size: .67rem; color: #72827c; }
 .metadata dd { margin: 0; font-weight: 600; }

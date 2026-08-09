@@ -55,6 +55,8 @@ The system must never silently treat a failed scan as proof that no new jobs exi
 ### 4.3 Scan schedule
 
 - Every active company is scanned every six hours.
+- The relational database is the durable MVP scan queue; no Redis service is required.
+- A separate worker process schedules due sources and executes queued scans independently of the web process.
 - Adding a company triggers an immediate validation and test scan.
 - A manual **Scan now** action should be available.
 - Scan work runs independently of the web interface.
@@ -254,7 +256,7 @@ Start with a modular monolith: one repository and one application codebase with 
 flowchart LR
     Browser["Web browser"] --> Web["Web application and API"]
     Web --> DB["Relational database"]
-    Scheduler["Six-hour scheduler"] --> Queue["Scan job queue"]
+    Scheduler["Six-hour scheduler"] --> Queue["Database-backed scan queue"]
     Queue --> Worker["Scanning worker"]
     Worker --> Official["Official careers pages"]
     Worker --> Normalizer["Job normalizer and deduplicator"]
@@ -272,7 +274,7 @@ flowchart LR
 - `scans`: scheduling, queueing, retries, and scan history
 - `jobs`: normalization, deduplication, versioning, and lifecycle
 - `matching`: hard constraints, semantic scoring, classification, and explanations
-- `feed`: job queries, seen state, saved state, and dismissals
+- `feed`: job queries, seen state, and dismissals
 
 Avoid separate microservices until scaling or isolation requirements make them necessary.
 
@@ -578,7 +580,7 @@ The first version does not include:
 
 These choices were not finalized in the initial discussion and should be resolved before or during implementation:
 
-1. **Technology stack:** frontend framework, backend runtime, relational database, job queue, browser automation library, and hosting provider.
+1. **Remaining technology choices:** browser automation library and hosting provider.
 2. **Authentication:** minimal single-user login versus a production-ready authentication provider from the start.
 3. **Preference schema:** exact fields and whether each uses `must satisfy`, `prefer`, and `no preference` states. The three-level approach is recommended but was not formally locked.
 4. **Semantic matching implementation:** embeddings, an LLM-based evaluator, a hybrid, or another approach; also cost, latency, privacy, and reproducibility requirements.

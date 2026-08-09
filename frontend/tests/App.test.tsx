@@ -8,7 +8,9 @@ const source = {
   detected_platform: "workday", connector_type: "workday_cxs",
   connector_config: { selected_facets: [{ facet_parameter: "timeType", label: "Full time", id: "facet-1" }] },
   detection: {}, setup_status: "unvalidated", health_status: "unknown", last_validation_at: null,
-  last_validation: {}, contacts: [], created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+  last_validation: {}, monitoring_status: "active", next_scan_at: "2026-01-01T06:00:00Z",
+  last_scan_attempt_at: null, last_successful_scan_at: null,
+  contacts: [], created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
 };
 
 const profile = {
@@ -222,4 +224,19 @@ test("adds a referral contact to a source", async () => {
   await user.type(screen.getByLabelText("Notes"), "Former teammate");
   await user.click(screen.getByRole("button", { name: "Add contact" }));
   expect(await screen.findByRole("link", { name: "Taylor" })).toBeInTheDocument();
+});
+
+test("pauses source monitoring", async () => {
+  mockApi((url, method, init) => {
+    if (url === "/api/sources" && method === "GET") return response([source]);
+    if (url === `/api/sources/${source.id}` && method === "PATCH") {
+      expect(JSON.parse(String(init?.body))).toEqual({ monitoring_status: "paused" });
+      return response({ ...source, monitoring_status: "paused" });
+    }
+  });
+  render(<App />);
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: "Pause monitoring" }));
+  expect(await screen.findByRole("button", { name: "Resume monitoring" })).toBeInTheDocument();
+  expect(screen.getByText("Paused")).toBeInTheDocument();
 });

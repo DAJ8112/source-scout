@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -28,7 +27,7 @@ from app.schemas import (
     SourceRead,
     ValidationResponse,
 )
-from app.services.scans import execute_scan, unfinished_scan_for_source
+from app.services.scans import unfinished_scan_for_source
 
 router = APIRouter(prefix="/api")
 
@@ -164,6 +163,11 @@ async def patch_source(
     if "connector_config" in changes:
         source.connector_config = changes["connector_config"]
         source.setup_status = "unvalidated"
+        source.next_scan_at = datetime.now(UTC)
+    if "monitoring_status" in changes:
+        source.monitoring_status = changes["monitoring_status"]
+        if source.monitoring_status == "active":
+            source.next_scan_at = datetime.now(UTC)
     if "url" in changes:
         source.url = str(changes["url"])
         try:
@@ -180,6 +184,7 @@ async def patch_source(
             source.connector_config = detection.config
             source.detection = detection.model_dump(mode="json")
             source.setup_status = "unvalidated"
+            source.next_scan_at = datetime.now(UTC)
     session.commit()
     session.refresh(source)
     return source
@@ -210,6 +215,8 @@ async def validate_source(
         validation_data = validation.model_dump(mode="json")
         source.setup_status = validation.setup_status
         source.health_status = "healthy" if validation.valid else "setup_required"
+        if validation.valid and source.last_successful_scan_at is None:
+            source.next_scan_at = datetime.now(UTC)
     source.last_validation_at = datetime.now(UTC)
     source.last_validation = validation_data
     session.commit()
@@ -225,7 +232,6 @@ async def validate_source(
 def create_scan(
     source_id: str,
     payload: ScanCreate,
-    request: Request,
     response: Response,
     session: Session = Depends(get_session),
 ) -> ScanRun:
@@ -242,10 +248,19 @@ def create_scan(
         )
     scan = ScanRun(source_id=source_id, trigger=payload.trigger, progress={"phase": "queued"})
     session.add(scan)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        existing = unfinished_scan_for_source(session, source_id)
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "scan_already_running",
+                "scan_id": existing.id if existing else None,
+            },
+        ) from exc
     session.refresh(scan)
-    task = asyncio.create_task(execute_scan(scan.id, request.app), name=f"scan-{scan.id}")
-    request.app.state.scan_tasks[scan.id] = task
     response.headers["Location"] = f"/api/scans/{scan.id}"
     return scan
 

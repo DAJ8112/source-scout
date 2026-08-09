@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.config import settings
 from app.connectors.errors import ConnectorError
 from app.connectors.registry import ConnectorRegistry
 from app.connectors.types import NormalizedJob
@@ -38,29 +40,112 @@ def apply_observation(job: Job, observed: NormalizedJob, observed_at: datetime) 
     job.last_observed_at = observed_at
 
 
-def recover_interrupted_runs(session: Session) -> int:
-    now = datetime.now(UTC)
-    result = session.execute(
-        update(ScanRun)
-        .where(ScanRun.status.in_(["queued", "running"]))
-        .values(
-            status="interrupted",
-            finished_at=now,
-            error_code="process_interrupted",
-            error_diagnostics={
-                "message": "The application stopped before this in-process scan finished; run it again."
-            },
+def recover_interrupted_runs(session: Session, now: datetime | None = None) -> int:
+    recovered_at = now or datetime.now(UTC)
+    stale_before = recovered_at - timedelta(seconds=settings.scan_stale_after_seconds)
+    running = list(
+        session.scalars(
+            select(ScanRun).where(
+                ScanRun.status == "running",
+                (ScanRun.started_at.is_(None)) | (ScanRun.started_at <= stale_before),
+            )
         )
     )
+    for scan in running:
+        scan.status = "interrupted"
+        scan.finished_at = recovered_at
+        scan.error_code = "process_interrupted"
+        scan.error_diagnostics = {
+            "message": "The scan worker stopped before this scan finished; it has been requeued."
+        }
+        source = session.get(CareersSource, scan.source_id)
+        if source:
+            source.last_scan_attempt_at = recovered_at
+            source.next_scan_at = recovered_at
     session.commit()
-    return result.rowcount or 0
+    return len(running)
+
+
+def unfinished_scan_for_source(session: Session, source_id: str) -> ScanRun | None:
+    return session.scalar(
+        select(ScanRun)
+        .where(ScanRun.source_id == source_id, ScanRun.status.in_(["queued", "running"]))
+        .limit(1)
+    )
+
+
+def enqueue_due_scans(session: Session, now: datetime | None = None) -> list[str]:
+    due_at = now or datetime.now(UTC)
+    sources = list(
+        session.scalars(
+            select(CareersSource)
+            .where(
+                CareersSource.monitoring_status == "active",
+                CareersSource.connector_type.is_not(None),
+                CareersSource.setup_status != "setup_required",
+                CareersSource.next_scan_at <= due_at,
+            )
+            .order_by(CareersSource.next_scan_at, CareersSource.created_at)
+        )
+    )
+    created: list[str] = []
+    for source in sources:
+        if unfinished_scan_for_source(session, source.id):
+            continue
+        scan = ScanRun(
+            source_id=source.id,
+            trigger="initial" if source.last_successful_scan_at is None else "scheduled",
+            progress={"phase": "queued"},
+        )
+        try:
+            with session.begin_nested():
+                session.add(scan)
+                session.flush()
+        except IntegrityError:
+            continue
+        created.append(scan.id)
+    session.commit()
+    return created
+
+
+def next_queued_scan_id(session: Session) -> str | None:
+    return session.scalar(
+        select(ScanRun.id)
+        .where(ScanRun.status == "queued")
+        .order_by(ScanRun.created_at, ScanRun.id)
+        .limit(1)
+    )
+
+
+def record_source_attempt(
+    source: CareersSource,
+    finished_at: datetime,
+    *,
+    successful: bool,
+) -> None:
+    source.last_scan_attempt_at = finished_at
+    if successful:
+        source.last_successful_scan_at = finished_at
+    source.next_scan_at = finished_at + timedelta(seconds=settings.scan_interval_seconds)
 
 
 async def execute_scan(scan_id: str, app) -> None:
     factory: sessionmaker[Session] = app.state.session_factory
     with factory() as session:
+        claim = session.execute(
+            update(ScanRun)
+            .where(ScanRun.id == scan_id, ScanRun.status == "queued")
+            .values(
+                status="running",
+                started_at=datetime.now(UTC),
+                progress={"phase": "traversing", "message": "Fetching official source"},
+            )
+        )
+        session.commit()
+        if claim.rowcount != 1:
+            return
         scan = session.get(ScanRun, scan_id)
-        if not scan or scan.status != "queued":
+        if not scan:
             return
         source = session.get(CareersSource, scan.source_id)
         if not source:
@@ -69,10 +154,6 @@ async def execute_scan(scan_id: str, app) -> None:
             scan.finished_at = datetime.now(UTC)
             session.commit()
             return
-        scan.status = "running"
-        scan.started_at = datetime.now(UTC)
-        scan.progress = {"phase": "traversing", "message": "Fetching official source"}
-        session.commit()
         try:
             connector = ConnectorRegistry(app.state.http).get(
                 source.connector_type or "", source.detected_platform
@@ -204,6 +285,7 @@ async def execute_scan(scan_id: str, app) -> None:
             scan.finished_at = datetime.now(UTC)
             source.health_status = "healthy"
             source.setup_status = "ready"
+            record_source_attempt(source, scan.finished_at, successful=True)
             session.commit()
         except ConnectorError as exc:
             session.rollback()
@@ -217,6 +299,7 @@ async def execute_scan(scan_id: str, app) -> None:
             scan.error_diagnostics = exc.as_dict()
             scan.progress = {"phase": "failed", "message": exc.message}
             if source:
+                record_source_attempt(source, scan.finished_at, successful=False)
                 if exc.code in {
                     "access_blocked",
                     "detail_extraction_failure",
@@ -244,13 +327,11 @@ async def execute_scan(scan_id: str, app) -> None:
                     "message": "Unexpected internal scan failure",
                     "exception": type(exc).__name__,
                 }
+                source = session.get(CareersSource, scan.source_id)
+                if source:
+                    source.health_status = "temporarily_failing"
+                    record_source_attempt(source, scan.finished_at, successful=False)
                 session.commit()
-    app.state.scan_tasks.pop(scan_id, None)
-
-
-def unfinished_scan_for_source(session: Session, source_id: str) -> ScanRun | None:
-    return session.scalar(
-        select(ScanRun)
-        .where(ScanRun.source_id == source_id, ScanRun.status.in_(["queued", "running"]))
-        .limit(1)
-    )
+    scan_tasks = getattr(app.state, "scan_tasks", None)
+    if scan_tasks is not None:
+        scan_tasks.pop(scan_id, None)
