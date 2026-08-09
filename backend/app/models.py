@@ -106,6 +106,31 @@ class ScanRun(Base):
     __table_args__ = (Index("ix_scan_source_status", "source_id", "status"),)
 
 
+class SearchProfile(Base):
+    __tablename__ = "search_profiles"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    resume_text: Mapped[str] = mapped_column(Text, default="")
+    resume_filename: Mapped[str | None] = mapped_column(String(300))
+    target_roles: Mapped[list] = mapped_column(JSON, default=list)
+    adjacent_roles: Mapped[list] = mapped_column(JSON, default=list)
+    preferred_locations: Mapped[list] = mapped_column(JSON, default=list)
+    remote_preference: Mapped[str] = mapped_column(String(30), default="no_preference")
+    employment_types: Mapped[list] = mapped_column(JSON, default=list)
+    required_terms: Mapped[list] = mapped_column(JSON, default=list)
+    excluded_terms: Mapped[list] = mapped_column(JSON, default=list)
+    preference_notes: Mapped[str] = mapped_column(Text, default="")
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=now_utc, onupdate=now_utc
+    )
+
+    match_results: Mapped[list[MatchResult]] = relationship(
+        back_populates="profile", cascade="all, delete-orphan"
+    )
+
+
 class Job(Base):
     __tablename__ = "jobs"
 
@@ -134,10 +159,58 @@ class Job(Base):
 
     source: Mapped[CareersSource] = relationship(back_populates="jobs")
     observations: Mapped[list[JobObservation]] = relationship(back_populates="job")
+    match_results: Mapped[list[MatchResult]] = relationship(
+        back_populates="job", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (
         UniqueConstraint("source_id", "identity_key", name="uq_job_source_identity"),
         Index("ix_job_source_lifecycle", "source_id", "lifecycle_status"),
+    )
+
+
+class MatchResult(Base):
+    __tablename__ = "match_results"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    job_id: Mapped[str] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"))
+    profile_id: Mapped[str] = mapped_column(ForeignKey("search_profiles.id", ondelete="CASCADE"))
+    profile_version: Mapped[int] = mapped_column(Integer)
+    job_content_fingerprint: Mapped[str] = mapped_column(String(64))
+    matcher_version: Mapped[str] = mapped_column(String(50))
+    classification: Mapped[str] = mapped_column(String(20))
+    score: Mapped[int] = mapped_column(Integer)
+    role_score: Mapped[int] = mapped_column(Integer)
+    resume_score: Mapped[int] = mapped_column(Integer)
+    hard_constraint_pass: Mapped[bool] = mapped_column(default=True)
+    hard_constraint_reasons: Mapped[list] = mapped_column(JSON, default=list)
+    evidence: Mapped[list] = mapped_column(JSON, default=list)
+    gaps: Mapped[list] = mapped_column(JSON, default=list)
+    provider: Mapped[str] = mapped_column(String(30))
+    provider_status: Mapped[str] = mapped_column(String(30))
+    model: Mapped[str | None] = mapped_column(String(100))
+    prompt_version: Mapped[str] = mapped_column(String(50))
+    request_id: Mapped[str | None] = mapped_column(String(200))
+    input_tokens: Mapped[int | None] = mapped_column(Integer)
+    output_tokens: Mapped[int | None] = mapped_column(Integer)
+    error: Mapped[str | None] = mapped_column(Text)
+    evaluated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+    job: Mapped[Job] = relationship(back_populates="match_results")
+    profile: Mapped[SearchProfile] = relationship(back_populates="match_results")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "job_id",
+            "profile_id",
+            "profile_version",
+            "job_content_fingerprint",
+            "matcher_version",
+            name="uq_match_cache_key",
+        ),
+        Index("ix_match_profile_class", "profile_id", "profile_version", "classification"),
+        Index("ix_match_job", "job_id"),
     )
 
 

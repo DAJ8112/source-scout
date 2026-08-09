@@ -3,9 +3,11 @@ from types import SimpleNamespace
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
+from app.config import Settings
 from app.connectors.errors import ConnectorError
 from app.connectors.types import NormalizedJob, ScanOutput
-from app.models import Base, CareersSource, Job, JobObservation, ScanRun
+from app.models import Base, CareersSource, Job, JobObservation, MatchResult, ScanRun, SearchProfile
+from app.services.matching import HybridMatcher
 from app.services.scans import execute_scan, recover_interrupted_runs, unfinished_scan_for_source
 
 
@@ -233,3 +235,50 @@ async def test_jobs_discovered_after_initial_scan_are_not_initial_imports(tmp_pa
         assert len(jobs) == 2
         assert jobs["1"].initial_import is True
         assert jobs["2"].initial_import is False
+
+
+async def test_successful_scan_matches_observed_jobs_when_profile_is_ready(tmp_path, monkeypatch):
+    factory = factory_for(tmp_path)
+    source_id, scan_id = source_and_scan(factory)
+    with factory() as session:
+        session.add(
+            SearchProfile(
+                resume_text="Built Python data pipelines.",
+                target_roles=["Data Engineer"],
+            )
+        )
+        session.commit()
+
+    job = NormalizedJob(
+        external_id="123",
+        canonical_url="https://careers.box.com/en/jobs/123/example",
+        title="Data Engineer",
+        locations=["Remote"],
+        employment_type="FULL_TIME",
+        posted_date=None,
+        description_html=None,
+        description_text="Build Python data pipelines.",
+        content_fingerprint="a" * 64,
+        raw_metadata={},
+    )
+
+    class FakeConnector:
+        async def scan(self, _url, _config):
+            return ScanOutput(jobs=[job], pages_visited=1)
+
+    monkeypatch.setattr("app.services.scans.ConnectorRegistry.get", lambda *_args: FakeConnector())
+    app = SimpleNamespace(
+        state=SimpleNamespace(
+            session_factory=factory,
+            http=None,
+            matcher=HybridMatcher(Settings(anthropic_api_key=None)),
+            scan_tasks={scan_id: object()},
+        )
+    )
+    await execute_scan(scan_id, app)
+
+    with factory() as session:
+        result = session.scalar(select(MatchResult))
+        assert result is not None
+        assert result.provider == "local"
+        assert result.job_id == session.scalar(select(Job.id))

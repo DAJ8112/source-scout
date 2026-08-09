@@ -5,10 +5,13 @@ description = "Local connector lab for official careers sources"
 requires-python = ">=3.14,<3.15"
 dependencies = [
   "alembic>=1.16,<2",
+  "anthropic>=0.72,<1",
   "beautifulsoup4>=4.13,<5",
   "fastapi>=0.116,<1",
   "httpx>=0.28,<1",
   "pydantic>=2.11,<3",
+  "pypdf>=6,<7",
+  "python-multipart>=0.0.20,<1",
   "sqlalchemy>=2.0,<3",
   "uvicorn[standard]>=0.35,<1",
 ]

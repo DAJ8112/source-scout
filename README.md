@@ -1,17 +1,20 @@
-# Referral Job Monitor — Connector Lab
+# Referral Job Monitor — Core MVP
 
-The current foundation is a local FastAPI + React application that validates and
-scans the three initial official careers sources, persists immutable scan
-observations in SQLite, and exposes actionable connector diagnostics. Successful
-scans also reconcile durable jobs: the first import is labeled separately, content
-changes are detected, one successful absence marks a job possibly closed, and two
-successful absences close it. Failed scans never advance job lifecycle state.
-The web app shows the durable active-job inventory and stores basic referral contacts
-for each company alongside its jobs.
+This local FastAPI + React application validates and scans the initial official
+careers sources, persists immutable scan observations in SQLite, and exposes
+actionable connector diagnostics. Successful scans reconcile durable jobs: the
+first import is labeled separately, content changes are detected, one successful
+absence marks a job possibly closed, and two successful absences close it. Failed
+scans never advance job lifecycle state.
 
-Profile and resume management, matching and ranking, job actions, authentication,
-scheduling, durable queues, and hosted deployment are the next MVP layers and are
-not implemented yet.
+The web app also stores referral contacts, extracts editable text from a resume PDF,
+captures job preferences, and ranks active jobs with hybrid matching. Explicit local
+constraints run first; eligible jobs are evaluated by Claude using structured output.
+Results are cached by profile version and job content. If Claude is unavailable or
+not configured, the app falls back to deterministic local scoring.
+
+Job actions, authentication, scheduling, durable queues, and hosted deployment are
+future layers.
 
 ## Prerequisites
 
@@ -19,6 +22,17 @@ not implemented yet.
 - Node.js 22 LTS and `pnpm`
 
 ## Run locally
+
+Copy the environment example and add your Anthropic API key to enable Claude
+matching. Without it, the app remains usable with local fallback matching.
+
+```bash
+cp .env.example .env
+```
+
+Export the variables before starting the backend, or load `.env` with your preferred
+shell tooling. The default model is pinned and can be changed with
+`ANTHROPIC_MODEL`.
 
 ```bash
 cd backend
@@ -36,6 +50,10 @@ pnpm dev
 ```
 
 Open <http://localhost:5173>. Vite proxies `/api` to FastAPI on port 8000.
+
+The uploaded PDF is read in memory and discarded after text extraction. Claude is
+sent job text, preferences, and selected relevant resume lines. The PDF and referral
+contacts are never sent to the model provider.
 
 ## Verify
 

@@ -1,6 +1,15 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api } from "./api";
-import type { CurrentJob, Job, Scan, Source, ValidationResult, WorkdayFacet } from "./api.types";
+import type {
+  FeedPage,
+  Job,
+  Scan,
+  SearchProfile,
+  SearchProfilePatch,
+  Source,
+  ValidationResult,
+  WorkdayFacet,
+} from "./api.types";
 import "./styles.css";
 
 const TERMINAL = new Set(["success", "success_with_warnings", "failed", "interrupted"]);
@@ -8,6 +17,100 @@ const TERMINAL = new Set(["success", "success_with_warnings", "failed", "interru
 function messageOf(value: unknown): string {
   if (value instanceof Error) return value.message;
   return "Unexpected error";
+}
+
+function splitList(value: string): string[] {
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function ProfilePanel({
+  profile,
+  busy,
+  onSave,
+  onUpload,
+  onRematch,
+}: {
+  profile: SearchProfile;
+  busy: boolean;
+  onSave: (payload: SearchProfilePatch) => Promise<void>;
+  onUpload: (file: File) => Promise<void>;
+  onRematch: () => Promise<void>;
+}) {
+  const [targetRoles, setTargetRoles] = useState("");
+  const [adjacentRoles, setAdjacentRoles] = useState("");
+  const [locations, setLocations] = useState("");
+  const [employmentTypes, setEmploymentTypes] = useState("");
+  const [requiredTerms, setRequiredTerms] = useState("");
+  const [excludedTerms, setExcludedTerms] = useState("");
+  const [remotePreference, setRemotePreference] = useState(profile.remote_preference);
+  const [preferenceNotes, setPreferenceNotes] = useState("");
+  const [resumeText, setResumeText] = useState("");
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+
+  useEffect(() => {
+    setTargetRoles(profile.target_roles.join(", "));
+    setAdjacentRoles(profile.adjacent_roles.join(", "));
+    setLocations(profile.preferred_locations.join(", "));
+    setEmploymentTypes(profile.employment_types.join(", "));
+    setRequiredTerms(profile.required_terms.join(", "));
+    setExcludedTerms(profile.excluded_terms.join(", "));
+    setRemotePreference(profile.remote_preference);
+    setPreferenceNotes(profile.preference_notes);
+    setResumeText(profile.resume_text);
+  }, [profile]);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    await onSave({
+      resume_text: resumeText,
+      target_roles: splitList(targetRoles),
+      adjacent_roles: splitList(adjacentRoles),
+      preferred_locations: splitList(locations),
+      remote_preference: remotePreference as SearchProfilePatch["remote_preference"],
+      employment_types: splitList(employmentTypes),
+      required_terms: splitList(requiredTerms),
+      excluded_terms: splitList(excludedTerms),
+      preference_notes: preferenceNotes,
+    });
+  }
+
+  async function upload(event: FormEvent) {
+    event.preventDefault();
+    if (!resumeFile) return;
+    await onUpload(resumeFile);
+    setResumeFile(null);
+  }
+
+  const ready = Boolean(resumeText.trim() && splitList(targetRoles).length);
+  return (
+    <section className="profile-panel">
+      <div className="section-heading">
+        <div><p className="eyebrow">Matching profile</p><h2>Tell the monitor what fits</h2></div>
+        <span>Version {profile.version}</span>
+      </div>
+      <form className="resume-upload" onSubmit={upload}>
+        <label>Resume PDF<input type="file" accept="application/pdf,.pdf" onChange={(event) => setResumeFile(event.target.files?.[0] ?? null)} /></label>
+        <button className="secondary" type="submit" disabled={!resumeFile || busy}>Extract text</button>
+        <small>{profile.resume_filename ? `Extracted from ${profile.resume_filename}` : "The PDF is discarded after extraction."}</small>
+      </form>
+      <form className="profile-form" onSubmit={save}>
+        <label>Target roles<input required value={targetRoles} onChange={(event) => setTargetRoles(event.target.value)} placeholder="Data Engineer, AI Engineer" /></label>
+        <label>Adjacent roles<input value={adjacentRoles} onChange={(event) => setAdjacentRoles(event.target.value)} placeholder="Data Platform Engineer" /></label>
+        <label>Preferred locations<input value={locations} onChange={(event) => setLocations(event.target.value)} placeholder="Remote, Indianapolis" /></label>
+        <label>Work arrangement<select value={remotePreference} onChange={(event) => setRemotePreference(event.target.value)}><option value="no_preference">No preference</option><option value="remote_only">Remote only</option><option value="remote_or_hybrid">Remote or hybrid</option><option value="on_site_ok">On-site is okay</option></select></label>
+        <label>Employment types<input value={employmentTypes} onChange={(event) => setEmploymentTypes(event.target.value)} placeholder="FULL_TIME" /></label>
+        <label>Preferred terms<input value={requiredTerms} onChange={(event) => setRequiredTerms(event.target.value)} placeholder="Python, LLM, AWS" /></label>
+        <label>Excluded terms<input value={excludedTerms} onChange={(event) => setExcludedTerms(event.target.value)} placeholder="Commission only" /></label>
+        <label className="wide">Other preferences<textarea value={preferenceNotes} onChange={(event) => setPreferenceNotes(event.target.value)} placeholder="Prefer product teams and platform ownership." /></label>
+        <label className="wide">Editable resume text<textarea className="resume-text" value={resumeText} onChange={(event) => setResumeText(event.target.value)} placeholder="Upload a PDF or paste resume text here." /></label>
+        <div className="profile-actions wide">
+          <button type="submit" disabled={busy}>Save profile</button>
+          <button type="button" className="secondary" disabled={busy || !ready} onClick={onRematch}>Run matching</button>
+          <small>Claude receives selected resume evidence and job text—not the PDF or referral contacts.</small>
+        </div>
+      </form>
+    </section>
+  );
 }
 
 function SourceCard({
@@ -219,32 +322,58 @@ function SourceCard({
   );
 }
 
-function JobInventory({ jobs, sources, loading }: { jobs: CurrentJob[]; sources: Source[]; loading: boolean }) {
-  const sourceById = new Map(sources.map((source) => [source.id, source]));
+function MatchFeed({ feed, loading }: { feed: FeedPage | null; loading: boolean }) {
+  const [showIrrelevant, setShowIrrelevant] = useState(false);
+  const visibleItems = (feed?.items ?? []).filter(
+    (item) => showIrrelevant || item.match?.classification !== "irrelevant",
+  );
+  const counts = (feed?.items ?? []).reduce<Record<string, number>>((current, item) => {
+    const classification = item.match?.classification ?? "unmatched";
+    current[classification] = (current[classification] ?? 0) + 1;
+    return current;
+  }, {});
   return (
     <section className="inventory">
       <div className="section-heading">
-        <div><p className="eyebrow">Durable inventory</p><h2>Active jobs</h2></div>
-        <span>{jobs.length} open</span>
+        <div><p className="eyebrow">Opportunity feed</p><h2>Active matches</h2></div>
+        <span>{feed?.total ?? 0} open</span>
       </div>
-      {loading ? <p>Loading active jobs…</p> : jobs.length === 0 ? (
-        <p className="empty">No durable jobs yet. Run a successful source scan to populate the inventory.</p>
+      {feed && (
+        <div className="feed-summary">
+          <span><strong>{counts.strong ?? 0}</strong> strong</span>
+          <span><strong>{counts.possible ?? 0}</strong> possible</span>
+          <span><strong>{counts.unmatched ?? 0}</strong> unmatched</span>
+          <span className={feed.provider_configured ? "provider-ready" : "provider-fallback"}>
+            {feed.provider_configured ? "Claude configured" : "Local fallback · add ANTHROPIC_API_KEY"}
+          </span>
+          {(counts.irrelevant ?? 0) > 0 && <button className="text-button" type="button" onClick={() => setShowIrrelevant((value) => !value)}>{showIrrelevant ? "Hide irrelevant" : `Show ${counts.irrelevant} irrelevant`}</button>}
+        </div>
+      )}
+      {loading ? <p>Loading matches…</p> : !feed || feed.items.length === 0 ? (
+        <p className="empty">No durable jobs yet. Run a successful source scan to populate the feed.</p>
       ) : (
         <div className="job-grid">
-          {jobs.map((job) => {
-            const source = sourceById.get(job.source_id);
+          {visibleItems.map((item) => {
+            const { job, match } = item;
+            const classification = match?.classification ?? "unmatched";
             return (
               <article className="job-card" key={job.id}>
                 <div className="job-labels">
-                  <span className="status status-healthy">{job.initial_import ? "Existing at setup" : "New"}</span>
-                  <span>{source?.company ?? "Unknown company"}</span>
+                  <span className={`match-class match-${classification}`}>{classification}</span>
+                  <span>{item.company}</span>
                 </div>
                 <h3><a href={job.canonical_url} target="_blank" rel="noreferrer">{job.title}</a></h3>
                 <p>{job.locations.join(" · ") || "Location not supplied"}</p>
-                {source && source.contacts.length > 0 && (
+                <div className="job-meta">
+                  <span>{job.initial_import ? "Existing at setup" : "New discovery"}</span>
+                  {match && <span>{match.score}/100 · {match.provider === "anthropic" ? "Claude" : "Local fallback"}</span>}
+                </div>
+                {match && match.evidence.length > 0 && <ul className="match-reasons">{match.evidence.slice(0, 3).map((reason) => <li key={reason}>{reason}</li>)}</ul>}
+                {match && match.gaps.length > 0 && <details><summary>Important gaps</summary><ul className="match-gaps">{match.gaps.slice(0, 3).map((gap) => <li key={gap}>{gap}</li>)}</ul></details>}
+                {item.contacts.length > 0 && (
                   <div className="job-contacts">
                     <strong>Referral contacts</strong>
-                    {source.contacts.map((contact) => contact.contact_url ? (
+                    {item.contacts.map((contact) => contact.contact_url ? (
                       <a key={contact.id} href={contact.contact_url} target="_blank" rel="noreferrer">{contact.name}</a>
                     ) : <span key={contact.id}>{contact.name}</span>)}
                   </div>
@@ -264,23 +393,73 @@ export default function App() {
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [currentJobs, setCurrentJobs] = useState<CurrentJob[]>([]);
-  const [jobsLoading, setJobsLoading] = useState(true);
+  const [profile, setProfile] = useState<SearchProfile | null>(null);
+  const [profileBusy, setProfileBusy] = useState(false);
+  const [feed, setFeed] = useState<FeedPage | null>(null);
+  const [feedLoading, setFeedLoading] = useState(true);
 
-  const reloadCurrentJobs = useCallback(async () => {
+  const reloadFeed = useCallback(async () => {
     try {
-      setCurrentJobs((await api.currentJobs()).items);
+      setFeed(await api.feed());
     } catch (reason) {
       setError(messageOf(reason));
     } finally {
-      setJobsLoading(false);
+      setFeedLoading(false);
     }
   }, []);
 
   useEffect(() => {
     api.sources().then(setSources).catch((reason) => setError(messageOf(reason))).finally(() => setLoading(false));
-    void reloadCurrentJobs();
-  }, [reloadCurrentJobs]);
+    api.profile().then(setProfile).catch((reason) => setError(messageOf(reason)));
+    void reloadFeed();
+  }, [reloadFeed]);
+
+  async function rematch() {
+    setProfileBusy(true);
+    setError("");
+    try {
+      await api.rematch();
+      await reloadFeed();
+    } catch (reason) {
+      setError(messageOf(reason));
+    } finally {
+      setProfileBusy(false);
+    }
+  }
+
+  async function saveProfile(payload: SearchProfilePatch) {
+    setProfileBusy(true);
+    setError("");
+    try {
+      const next = await api.patchProfile(payload);
+      setProfile(next);
+      if (next.resume_text.trim() && next.target_roles.length > 0) {
+        await api.rematch();
+        await reloadFeed();
+      }
+    } catch (reason) {
+      setError(messageOf(reason));
+    } finally {
+      setProfileBusy(false);
+    }
+  }
+
+  async function uploadResume(file: File) {
+    setProfileBusy(true);
+    setError("");
+    try {
+      const next = await api.uploadResume(file);
+      setProfile(next);
+      if (next.target_roles.length > 0) {
+        await api.rematch();
+        await reloadFeed();
+      }
+    } catch (reason) {
+      setError(messageOf(reason));
+    } finally {
+      setProfileBusy(false);
+    }
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -307,6 +486,18 @@ export default function App() {
         <p>Track official careers pages, see what changed, and keep referral contacts beside every opportunity.</p>
       </header>
 
+      {error && <div role="alert" className="notice error global-error">{error}</div>}
+
+      {profile ? (
+        <ProfilePanel
+          profile={profile}
+          busy={profileBusy}
+          onSave={saveProfile}
+          onUpload={uploadResume}
+          onRematch={rematch}
+        />
+      ) : <section className="profile-panel"><p>Loading matching profile…</p></section>}
+
       <section className="onboarding">
         <div><p className="eyebrow">Add a source</p><h2>Connect an official careers page</h2></div>
         <form onSubmit={submit}>
@@ -314,15 +505,14 @@ export default function App() {
           <label>Official careers URL<input required type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://…" /></label>
           <button type="submit">Add source</button>
         </form>
-        {error && <div role="alert" className="notice error">{error}</div>}
       </section>
 
-      <JobInventory jobs={currentJobs} sources={sources} loading={jobsLoading} />
+      <MatchFeed feed={feed} loading={feedLoading} />
 
       <section className="source-list">
         <div className="section-heading"><h2>Sources</h2><span>{sources.length} configured</span></div>
         {loading ? <p>Loading sources…</p> : sources.length === 0 ? <p className="empty">No sources yet. Add one above to begin.</p> :
-          sources.map((source) => <SourceCard key={source.id} source={source} onChange={replaceSource} onScanComplete={reloadCurrentJobs} />)}
+          sources.map((source) => <SourceCard key={source.id} source={source} onChange={replaceSource} onScanComplete={reloadFeed} />)}
       </section>
     </main>
   );

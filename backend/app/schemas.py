@@ -1,11 +1,23 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
 from app.connectors.types import ValidationResult
+
+
+def clean_string_list(values: list[str]) -> list[str]:
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        item = value.strip()
+        key = item.casefold()
+        if item and key not in seen:
+            cleaned.append(item)
+            seen.add(key)
+    return cleaned
 
 
 class SourceCreate(BaseModel):
@@ -151,6 +163,68 @@ class ScanRead(BaseModel):
     error_diagnostics: dict[str, Any]
 
 
+class SearchProfilePatch(BaseModel):
+    resume_text: str | None = Field(default=None, max_length=100_000)
+    target_roles: list[str] | None = Field(default=None, max_length=30)
+    adjacent_roles: list[str] | None = Field(default=None, max_length=30)
+    preferred_locations: list[str] | None = Field(default=None, max_length=30)
+    remote_preference: Literal[
+        "no_preference", "remote_only", "remote_or_hybrid", "on_site_ok"
+    ] | None = None
+    employment_types: list[str] | None = Field(default=None, max_length=20)
+    required_terms: list[str] | None = Field(default=None, max_length=50)
+    excluded_terms: list[str] | None = Field(default=None, max_length=50)
+    preference_notes: str | None = Field(default=None, max_length=10_000)
+
+    @field_validator(
+        "resume_text",
+        "target_roles",
+        "adjacent_roles",
+        "preferred_locations",
+        "remote_preference",
+        "employment_types",
+        "required_terms",
+        "excluded_terms",
+        "preference_notes",
+    )
+    @classmethod
+    def reject_null_profile_updates(cls, value: Any) -> Any:
+        if value is None:
+            raise ValueError("profile fields cannot be null")
+        return value
+
+    @field_validator(
+        "target_roles",
+        "adjacent_roles",
+        "preferred_locations",
+        "employment_types",
+        "required_terms",
+        "excluded_terms",
+    )
+    @classmethod
+    def clean_lists(cls, value: list[str] | None) -> list[str] | None:
+        return clean_string_list(value) if value is not None else None
+
+
+class SearchProfileRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    resume_text: str
+    resume_filename: str | None
+    target_roles: list[str]
+    adjacent_roles: list[str]
+    preferred_locations: list[str]
+    remote_preference: str
+    employment_types: list[str]
+    required_terms: list[str]
+    excluded_terms: list[str]
+    preference_notes: str
+    version: int
+    created_at: datetime
+    updated_at: datetime
+
+
 class JobRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -206,3 +280,53 @@ class CurrentJobsPage(BaseModel):
     page: int
     page_size: int
     total: int
+
+
+class MatchResultRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    job_id: str
+    profile_id: str
+    profile_version: int
+    job_content_fingerprint: str
+    matcher_version: str
+    classification: str
+    score: int
+    role_score: int
+    resume_score: int
+    hard_constraint_pass: bool
+    hard_constraint_reasons: list[str]
+    evidence: list[str]
+    gaps: list[str]
+    provider: str
+    provider_status: str
+    model: str | None
+    prompt_version: str
+    request_id: str | None
+    input_tokens: int | None
+    output_tokens: int | None
+    error: str | None
+    evaluated_at: datetime
+
+
+class FeedItem(BaseModel):
+    job: CurrentJobRead
+    company: str
+    contacts: list[ReferralContactRead]
+    match: MatchResultRead | None
+
+
+class FeedPage(BaseModel):
+    items: list[FeedItem]
+    total: int
+    profile_ready: bool
+    provider_configured: bool
+
+
+class RematchResponse(BaseModel):
+    evaluated: int
+    cached: int
+    ai_succeeded: int
+    local_fallbacks: int
+    failed: int

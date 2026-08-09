@@ -1,8 +1,12 @@
 import type {
   CurrentJobsPage,
+  FeedPage,
   JobsPage,
   ReferralContact,
+  RematchResponse,
   Scan,
+  SearchProfile,
+  SearchProfilePatch,
   Source,
   ValidationResult,
 } from "./api.types";
@@ -14,8 +18,9 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const isFormData = init?.body instanceof FormData;
   const response = await fetch(path, {
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: { ...(isFormData ? {} : { "Content-Type": "application/json" }), ...init?.headers },
     ...init,
   });
   if (!response.ok) {
@@ -64,4 +69,14 @@ export const api = {
     }),
   deleteContact: (sourceId: string, contactId: string) =>
     request<void>(`/api/sources/${sourceId}/contacts/${contactId}`, { method: "DELETE" }),
+  profile: () => request<SearchProfile>("/api/profile"),
+  patchProfile: (payload: SearchProfilePatch) =>
+    request<SearchProfile>("/api/profile", { method: "PATCH", body: JSON.stringify(payload) }),
+  uploadResume: (file: File) => {
+    const body = new FormData();
+    body.append("file", file);
+    return request<SearchProfile>("/api/profile/resume", { method: "POST", body });
+  },
+  rematch: () => request<RematchResponse>("/api/profile/rematch", { method: "POST" }),
+  feed: () => request<FeedPage>("/api/feed"),
 };

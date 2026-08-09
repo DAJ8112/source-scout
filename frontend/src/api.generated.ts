@@ -177,6 +177,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Profile */
+        get: operations["get_profile_api_profile_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Profile */
+        patch: operations["patch_profile_api_profile_patch"];
+        trace?: never;
+    };
+    "/api/profile/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload Resume */
+        post: operations["upload_resume_api_profile_resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/profile/rematch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rematch Profile */
+        post: operations["rematch_profile_api_profile_rematch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/feed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Feed */
+        get: operations["get_feed_api_feed_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -198,6 +267,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Body_upload_resume_api_profile_resume_post */
+        Body_upload_resume_api_profile_resume_post: {
+            /** File */
+            file: string;
+        };
         /** CurrentJobRead */
         CurrentJobRead: {
             /** Id */
@@ -264,6 +338,26 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** FeedItem */
+        FeedItem: {
+            job: components["schemas"]["CurrentJobRead"];
+            /** Company */
+            company: string;
+            /** Contacts */
+            contacts: components["schemas"]["ReferralContactRead"][];
+            match: components["schemas"]["MatchResultRead"] | null;
+        };
+        /** FeedPage */
+        FeedPage: {
+            /** Items */
+            items: components["schemas"]["FeedItem"][];
+            /** Total */
+            total: number;
+            /** Profile Ready */
+            profile_ready: boolean;
+            /** Provider Configured */
+            provider_configured: boolean;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -316,6 +410,58 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** MatchResultRead */
+        MatchResultRead: {
+            /** Id */
+            id: string;
+            /** Job Id */
+            job_id: string;
+            /** Profile Id */
+            profile_id: string;
+            /** Profile Version */
+            profile_version: number;
+            /** Job Content Fingerprint */
+            job_content_fingerprint: string;
+            /** Matcher Version */
+            matcher_version: string;
+            /** Classification */
+            classification: string;
+            /** Score */
+            score: number;
+            /** Role Score */
+            role_score: number;
+            /** Resume Score */
+            resume_score: number;
+            /** Hard Constraint Pass */
+            hard_constraint_pass: boolean;
+            /** Hard Constraint Reasons */
+            hard_constraint_reasons: string[];
+            /** Evidence */
+            evidence: string[];
+            /** Gaps */
+            gaps: string[];
+            /** Provider */
+            provider: string;
+            /** Provider Status */
+            provider_status: string;
+            /** Model */
+            model: string | null;
+            /** Prompt Version */
+            prompt_version: string;
+            /** Request Id */
+            request_id: string | null;
+            /** Input Tokens */
+            input_tokens: number | null;
+            /** Output Tokens */
+            output_tokens: number | null;
+            /** Error */
+            error: string | null;
+            /**
+             * Evaluated At
+             * Format: date-time
+             */
+            evaluated_at: string;
+        };
         /** ReferralContactCreate */
         ReferralContactCreate: {
             /** Name */
@@ -356,6 +502,19 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** RematchResponse */
+        RematchResponse: {
+            /** Evaluated */
+            evaluated: number;
+            /** Cached */
+            cached: number;
+            /** Ai Succeeded */
+            ai_succeeded: number;
+            /** Local Fallbacks */
+            local_fallbacks: number;
+            /** Failed */
+            failed: number;
         };
         /** ScanCreate */
         ScanCreate: {
@@ -408,6 +567,64 @@ export interface components {
             error_diagnostics: {
                 [key: string]: unknown;
             };
+        };
+        /** SearchProfilePatch */
+        SearchProfilePatch: {
+            /** Resume Text */
+            resume_text?: string | null;
+            /** Target Roles */
+            target_roles?: string[] | null;
+            /** Adjacent Roles */
+            adjacent_roles?: string[] | null;
+            /** Preferred Locations */
+            preferred_locations?: string[] | null;
+            /** Remote Preference */
+            remote_preference?: ("no_preference" | "remote_only" | "remote_or_hybrid" | "on_site_ok") | null;
+            /** Employment Types */
+            employment_types?: string[] | null;
+            /** Required Terms */
+            required_terms?: string[] | null;
+            /** Excluded Terms */
+            excluded_terms?: string[] | null;
+            /** Preference Notes */
+            preference_notes?: string | null;
+        };
+        /** SearchProfileRead */
+        SearchProfileRead: {
+            /** Id */
+            id: string;
+            /** Resume Text */
+            resume_text: string;
+            /** Resume Filename */
+            resume_filename: string | null;
+            /** Target Roles */
+            target_roles: string[];
+            /** Adjacent Roles */
+            adjacent_roles: string[];
+            /** Preferred Locations */
+            preferred_locations: string[];
+            /** Remote Preference */
+            remote_preference: string;
+            /** Employment Types */
+            employment_types: string[];
+            /** Required Terms */
+            required_terms: string[];
+            /** Excluded Terms */
+            excluded_terms: string[];
+            /** Preference Notes */
+            preference_notes: string;
+            /** Version */
+            version: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /** SourceCreate */
         SourceCreate: {
@@ -928,6 +1145,143 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CurrentJobRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_profile_api_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchProfileRead"];
+                };
+            };
+        };
+    };
+    patch_profile_api_profile_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchProfilePatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchProfileRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_resume_api_profile_resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_resume_api_profile_resume_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchProfileRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rematch_profile_api_profile_rematch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RematchResponse"];
+                };
+            };
+        };
+    };
+    get_feed_api_feed_get: {
+        parameters: {
+            query?: {
+                classification?: ("strong" | "possible" | "irrelevant" | "unmatched") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedPage"];
                 };
             };
             /** @description Validation Error */

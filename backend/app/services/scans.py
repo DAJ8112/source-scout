@@ -10,6 +10,7 @@ from app.connectors.errors import ConnectorError
 from app.connectors.registry import ConnectorRegistry
 from app.connectors.types import NormalizedJob
 from app.models import CareersSource, Job, JobObservation, ScanRun
+from app.services.matching import match_jobs
 
 logger = logging.getLogger(__name__)
 
@@ -172,8 +173,29 @@ async def execute_scan(scan_id: str, app) -> None:
                 )
                 scan.jobs_missing += 1
 
+            matcher = getattr(app.state, "matcher", None)
+            if matcher:
+                scan.progress = {
+                    "phase": "matching",
+                    "current": 0,
+                    "total": len(observed_job_ids),
+                }
+                match_summary = await match_jobs(
+                    session,
+                    matcher,
+                    job_ids=observed_job_ids,
+                )
+                if match_summary.failed:
+                    scan.warnings = [
+                        *scan.warnings,
+                        {
+                            "code": "matching_failures",
+                            "message": f"{match_summary.failed} job(s) could not be matched",
+                        },
+                    ]
+
             scan.jobs_persisted = len(unique_jobs)
-            scan.status = "success_with_warnings" if output.warnings else "success"
+            scan.status = "success_with_warnings" if scan.warnings else "success"
             scan.progress = {
                 "phase": "complete",
                 "current": len(unique_jobs),
