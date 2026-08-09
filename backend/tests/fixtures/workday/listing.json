@@ -1,0 +1,16 @@
+{
+  "total": 2,
+  "facets": [
+    {"facetParameter": "timeType", "descriptor": "Time Type", "values": [{"id": "1aea6da227e21005504339b6b1770001", "descriptor": "Full time", "count": 2}]},
+    {"facetParameter": "workerSubType", "descriptor": "Worker Sub-Type", "values": [{"id": "183bb31d97231001005066125c530001", "descriptor": "Regular", "count": 2}]},
+    {"facetParameter": "jobFamilyGroup", "descriptor": "Job Family", "values": [
+      {"id": "e65dbadf6a50100168ed86fe4cf50001", "descriptor": "Technology", "count": 1},
+      {"id": "e65dbadf6a50100168ed7f2a693c0001", "descriptor": "Data and Analytics", "count": 1}
+    ]}
+  ],
+  "jobPostings": [
+    {"title": "Senior Data Engineer", "externalPath": "/job/Remote/Senior-Data-Engineer_R001", "bulletFields": ["R001"]},
+    {"title": "Software Engineer", "externalPath": "/job/Chicago/Software-Engineer_R002", "bulletFields": ["R002"]}
+  ]
+}
+

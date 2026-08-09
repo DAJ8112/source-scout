@@ -1,0 +1,64 @@
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { vi } from "vitest";
+import App from "../src/App";
+
+const source = {
+  id: "source-1", company: "CVS Health", url: "https://cvshealth.wd1.myworkdayjobs.com/CVS_Health_Careers",
+  detected_platform: "workday", connector_type: "workday_cxs",
+  connector_config: { selected_facets: [{ facet_parameter: "timeType", label: "Full time", id: "facet-1" }] },
+  detection: {}, setup_status: "unvalidated", health_status: "unknown", last_validation_at: null,
+  last_validation: {}, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+};
+
+function response(body: unknown, status = 200) {
+  return Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }));
+}
+
+test("onboards and validates a source with facet selection", async () => {
+  const fetchMock = vi.spyOn(globalThis, "fetch")
+    .mockImplementationOnce(() => response([]))
+    .mockImplementationOnce(() => response(source, 201))
+    .mockImplementationOnce(() => response({ source: { ...source, health_status: "healthy", setup_status: "ready" }, validation: {
+      valid: true, setup_status: "ready", job_count: 12, sample_jobs: [], warnings: [], diagnostics: {},
+      available_facets: [{ facet_parameter: "timeType", label: "Time type", values: [{ id: "facet-2", label: "Part time" }] }],
+    }}));
+  render(<App />);
+  const user = userEvent.setup();
+  await user.type(screen.getByLabelText("Company"), "CVS Health");
+  await user.type(screen.getByLabelText("Official careers URL"), source.url);
+  await user.click(screen.getByRole("button", { name: "Add source" }));
+  expect(await screen.findByText("CVS Health")).toBeInTheDocument();
+  expect(screen.getByLabelText(/Full time/)).toBeChecked();
+  await user.click(screen.getByRole("button", { name: "Validate source" }));
+  expect(await screen.findByText("Validated · 12 jobs available")).toBeInTheDocument();
+  expect(fetchMock).toHaveBeenCalledTimes(3);
+});
+
+test("polls a scan, renders normalized results, and presents failures", async () => {
+  vi.spyOn(globalThis, "fetch")
+    .mockImplementationOnce(() => response([source]))
+    .mockImplementationOnce(() => response({ id: "scan-1", source_id: source.id, trigger: "manual", status: "queued", created_at: "", started_at: null, finished_at: null, progress: {}, jobs_found: 0, jobs_persisted: 0, pages_visited: 0, warnings: [], error_code: null, error_diagnostics: {} }, 202))
+    .mockImplementationOnce(() => response({ id: "scan-1", source_id: source.id, trigger: "manual", status: "success", created_at: "", started_at: "", finished_at: "", progress: {}, jobs_found: 1, jobs_persisted: 1, pages_visited: 2, warnings: [], error_code: null, error_diagnostics: {} }))
+    .mockImplementationOnce(() => response({ items: [{ id: "job-1", scan_run_id: "scan-1", source_id: source.id, external_id: "R1", canonical_url: "https://example.com/job/1", title: "Data Engineer", locations: ["Remote"], employment_type: "FULL_TIME", posted_date: null, description_html: null, description_text: null, content_fingerprint: "abc", raw_metadata: {}, observed_at: "" }], page: 1, page_size: 25, total: 1 }));
+  render(<App />);
+  const user = userEvent.setup();
+  expect(await screen.findByText("CVS Health")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Scan now" }));
+  expect(await screen.findByText("Data Engineer", {}, { timeout: 2000 })).toBeInTheDocument();
+  expect(screen.getByText("Remote")).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByText("Scan: success")).toBeInTheDocument());
+});
+
+test("shows API errors during onboarding", async () => {
+  vi.spyOn(globalThis, "fetch")
+    .mockImplementationOnce(() => response([]))
+    .mockImplementationOnce(() => response({ detail: "This careers URL already exists" }, 409));
+  render(<App />);
+  const user = userEvent.setup();
+  await user.type(screen.getByLabelText("Company"), "Duplicate");
+  await user.type(screen.getByLabelText("Official careers URL"), "https://example.com/jobs");
+  await user.click(screen.getByRole("button", { name: "Add source" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("already exists");
+});
+
