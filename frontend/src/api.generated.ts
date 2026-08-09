@@ -40,6 +40,41 @@ export interface paths {
         patch: operations["patch_source_api_sources__source_id__patch"];
         trace?: never;
     };
+    "/api/sources/{source_id}/contacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Contact */
+        post: operations["create_contact_api_sources__source_id__contacts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sources/{source_id}/contacts/{contact_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Contact */
+        delete: operations["delete_contact_api_sources__source_id__contacts__contact_id__delete"];
+        options?: never;
+        head?: never;
+        /** Patch Contact */
+        patch: operations["patch_contact_api_sources__source_id__contacts__contact_id__patch"];
+        trace?: never;
+    };
     "/api/sources/{source_id}/validate": {
         parameters: {
             query?: never;
@@ -281,6 +316,47 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** ReferralContactCreate */
+        ReferralContactCreate: {
+            /** Name */
+            name: string;
+            /** Contact Url */
+            contact_url?: string | null;
+            /** Notes */
+            notes?: string | null;
+        };
+        /** ReferralContactPatch */
+        ReferralContactPatch: {
+            /** Name */
+            name?: string | null;
+            /** Contact Url */
+            contact_url?: string | null;
+            /** Notes */
+            notes?: string | null;
+        };
+        /** ReferralContactRead */
+        ReferralContactRead: {
+            /** Id */
+            id: string;
+            /** Source Id */
+            source_id: string;
+            /** Name */
+            name: string;
+            /** Contact Url */
+            contact_url: string | null;
+            /** Notes */
+            notes: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** ScanCreate */
         ScanCreate: {
             /**
@@ -384,6 +460,8 @@ export interface components {
             last_validation: {
                 [key: string]: unknown;
             };
+            /** Contacts */
+            contacts: components["schemas"]["ReferralContactRead"][];
             /**
              * Created At
              * Format: date-time
@@ -553,6 +631,107 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_contact_api_sources__source_id__contacts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReferralContactCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferralContactRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_contact_api_sources__source_id__contacts__contact_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: string;
+                contact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_contact_api_sources__source_id__contacts__contact_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: string;
+                contact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReferralContactPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferralContactRead"];
                 };
             };
             /** @description Validation Error */

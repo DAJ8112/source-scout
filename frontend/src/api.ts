@@ -1,4 +1,11 @@
-import type { JobsPage, Scan, Source, ValidationResult } from "./api.types";
+import type {
+  CurrentJobsPage,
+  JobsPage,
+  ReferralContact,
+  Scan,
+  Source,
+  ValidationResult,
+} from "./api.types";
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -21,6 +28,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new ApiError(response.status, message);
   }
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
@@ -44,4 +52,16 @@ export const api = {
     }),
   scan: (id: string) => request<Scan>(`/api/scans/${id}`),
   jobs: (id: string, page = 1) => request<JobsPage>(`/api/scans/${id}/jobs?page=${page}&page_size=25`),
+  currentJobs: () => request<CurrentJobsPage>("/api/jobs?lifecycle_status=active&page_size=100"),
+  createContact: (sourceId: string, name: string, contact_url: string, notes: string) =>
+    request<ReferralContact>(`/api/sources/${sourceId}/contacts`, {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        contact_url: contact_url || null,
+        notes: notes || null,
+      }),
+    }),
+  deleteContact: (sourceId: string, contactId: string) =>
+    request<void>(`/api/sources/${sourceId}/contacts/${contactId}`, { method: "DELETE" }),
 };

@@ -41,6 +41,7 @@ def test_source_crud_and_concurrent_scan_rejection(tmp_path):
         assert client.get("/api/sources").json()[0]["id"] == source["id"]
         patched = client.patch(f"/api/sources/{source['id']}", json={"company": "CVS"})
         assert patched.json()["company"] == "CVS"
+        assert client.patch(f"/api/sources/{source['id']}", json={"company": None}).status_code == 422
         with factory() as session:
             session.add(ScanRun(source_id=source["id"], trigger="manual", status="running"))
             session.commit()
@@ -109,3 +110,57 @@ def test_current_jobs_can_be_filtered_and_read(tmp_path):
         assert response.json()["items"][0]["title"] == "Data Engineer"
         assert client.get(f"/api/jobs/{job.id}").json()["initial_import"] is True
         assert client.get("/api/jobs?lifecycle_status=invalid").status_code == 422
+
+
+def test_referral_contact_crud_is_scoped_to_source(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'api4.db'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    with factory() as session:
+        source = CareersSource(company="Example", url="https://example.com/careers")
+        other = CareersSource(company="Other", url="https://other.example.com/careers")
+        session.add_all([source, other])
+        session.commit()
+
+    def override_session():
+        with factory() as session:
+            yield session
+
+    app = create_app()
+    app.dependency_overrides[get_session] = override_session
+    with TestClient(app) as client:
+        created = client.post(
+            f"/api/sources/{source.id}/contacts",
+            json={
+                "name": "  Taylor  ",
+                "contact_url": "https://www.linkedin.com/in/taylor",
+                "notes": "  Former teammate  ",
+            },
+        )
+        assert created.status_code == 201
+        contact = created.json()
+        assert contact["name"] == "Taylor"
+        assert contact["notes"] == "Former teammate"
+        assert client.get(f"/api/sources/{source.id}").json()["contacts"][0]["id"] == contact["id"]
+
+        wrong_source = client.patch(
+            f"/api/sources/{other.id}/contacts/{contact['id']}", json={"name": "Nope"}
+        )
+        assert wrong_source.status_code == 404
+        assert (
+            client.patch(
+                f"/api/sources/{source.id}/contacts/{contact['id']}", json={"name": None}
+            ).status_code
+            == 422
+        )
+        patched = client.patch(
+            f"/api/sources/{source.id}/contacts/{contact['id']}",
+            json={"contact_url": None, "notes": None},
+        )
+        assert patched.json()["contact_url"] is None
+        assert patched.json()["notes"] is None
+        assert (
+            client.delete(f"/api/sources/{source.id}/contacts/{contact['id']}").status_code
+            == 204
+        )
+        assert client.get(f"/api/sources/{source.id}").json()["contacts"] == []

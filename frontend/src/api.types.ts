@@ -48,3 +48,6 @@ export type Scan = Omit<GeneratedScan, "progress" | "warnings" | "error_diagnost
 
 export type Job = components["schemas"]["JobRead"];
 export type JobsPage = components["schemas"]["JobsPage"];
+export type CurrentJob = components["schemas"]["CurrentJobRead"];
+export type CurrentJobsPage = components["schemas"]["CurrentJobsPage"];
+export type ReferralContact = components["schemas"]["ReferralContactRead"];

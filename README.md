@@ -6,10 +6,12 @@ observations in SQLite, and exposes actionable connector diagnostics. Successful
 scans also reconcile durable jobs: the first import is labeled separately, content
 changes are detected, one successful absence marks a job possibly closed, and two
 successful absences close it. Failed scans never advance job lifecycle state.
+The web app shows the durable active-job inventory and stores basic referral contacts
+for each company alongside its jobs.
 
-Profile and resume management, referral contacts, matching, the product feed,
-authentication, scheduling, durable queues, and hosted deployment are the next MVP
-layers and are not implemented yet.
+Profile and resume management, matching and ranking, job actions, authentication,
+scheduling, durable queues, and hosted deployment are the next MVP layers and are
+not implemented yet.
 
 ## Prerequisites
 

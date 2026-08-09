@@ -7,17 +7,20 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.connectors.errors import ConnectorError
 from app.connectors.registry import ConnectorRegistry
 from app.db import get_session
-from app.models import CareersSource, Job, JobObservation, ScanRun
+from app.models import CareersSource, Job, JobObservation, ReferralContact, ScanRun
 from app.schemas import (
     CurrentJobRead,
     CurrentJobsPage,
     JobRead,
     JobsPage,
+    ReferralContactCreate,
+    ReferralContactPatch,
+    ReferralContactRead,
     ScanCreate,
     ScanRead,
     SourceCreate,
@@ -65,12 +68,86 @@ async def create_source(
 
 @router.get("/sources", response_model=list[SourceRead])
 def list_sources(session: Session = Depends(get_session)) -> list[CareersSource]:
-    return list(session.scalars(select(CareersSource).order_by(CareersSource.created_at)).all())
+    return list(
+        session.scalars(
+            select(CareersSource)
+            .options(selectinload(CareersSource.contacts))
+            .order_by(CareersSource.created_at)
+        ).all()
+    )
 
 
 @router.get("/sources/{source_id}", response_model=SourceRead)
 def get_source(source_id: str, session: Session = Depends(get_session)) -> CareersSource:
     return source_or_404(session, source_id)
+
+
+def contact_or_404(
+    session: Session, source_id: str, contact_id: str
+) -> ReferralContact:
+    contact = session.get(ReferralContact, contact_id)
+    if not contact or contact.source_id != source_id:
+        raise HTTPException(status_code=404, detail="Referral contact not found")
+    return contact
+
+
+@router.post(
+    "/sources/{source_id}/contacts",
+    response_model=ReferralContactRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_contact(
+    source_id: str,
+    payload: ReferralContactCreate,
+    session: Session = Depends(get_session),
+) -> ReferralContact:
+    source_or_404(session, source_id)
+    contact = ReferralContact(
+        source_id=source_id,
+        name=payload.name,
+        contact_url=str(payload.contact_url) if payload.contact_url else None,
+        notes=payload.notes,
+    )
+    session.add(contact)
+    session.commit()
+    session.refresh(contact)
+    return contact
+
+
+@router.patch(
+    "/sources/{source_id}/contacts/{contact_id}", response_model=ReferralContactRead
+)
+def patch_contact(
+    source_id: str,
+    contact_id: str,
+    payload: ReferralContactPatch,
+    session: Session = Depends(get_session),
+) -> ReferralContact:
+    contact = contact_or_404(session, source_id, contact_id)
+    changes = payload.model_dump(exclude_unset=True)
+    if "name" in changes:
+        contact.name = changes["name"]
+    if "contact_url" in changes:
+        contact.contact_url = str(changes["contact_url"]) if changes["contact_url"] else None
+    if "notes" in changes:
+        contact.notes = changes["notes"]
+    session.commit()
+    session.refresh(contact)
+    return contact
+
+
+@router.delete(
+    "/sources/{source_id}/contacts/{contact_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_contact(
+    source_id: str,
+    contact_id: str,
+    session: Session = Depends(get_session),
+) -> Response:
+    contact = contact_or_404(session, source_id, contact_id)
+    session.delete(contact)
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.patch("/sources/{source_id}", response_model=SourceRead)

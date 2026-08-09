@@ -15,13 +15,83 @@ class SourceCreate(BaseModel):
     @field_validator("company")
     @classmethod
     def clean_company(cls, value: str) -> str:
-        return value.strip()
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("company cannot be blank")
+        return cleaned
 
 
 class SourcePatch(BaseModel):
     company: str | None = Field(default=None, min_length=1, max_length=200)
     url: HttpUrl | None = None
     connector_config: dict[str, Any] | None = None
+
+    @field_validator("company")
+    @classmethod
+    def clean_company(cls, value: str | None) -> str:
+        if value is None or not value.strip():
+            raise ValueError("company cannot be blank or null")
+        return value.strip()
+
+    @field_validator("url", "connector_config")
+    @classmethod
+    def reject_null_updates(cls, value: Any) -> Any:
+        if value is None:
+            raise ValueError("field cannot be null")
+        return value
+
+
+class ReferralContactCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    contact_url: HttpUrl | None = None
+    notes: str | None = Field(default=None, max_length=4000)
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("name cannot be blank")
+        return cleaned
+
+    @field_validator("notes")
+    @classmethod
+    def clean_notes(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
+
+
+class ReferralContactPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    contact_url: HttpUrl | None = None
+    notes: str | None = Field(default=None, max_length=4000)
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value: str | None) -> str:
+        if value is None or not value.strip():
+            raise ValueError("name cannot be blank or null")
+        return value.strip()
+
+    @field_validator("notes")
+    @classmethod
+    def clean_notes(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
+
+
+class ReferralContactRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    source_id: str
+    name: str
+    contact_url: str | None
+    notes: str | None
+    created_at: datetime
+    updated_at: datetime
 
 
 class SourceRead(BaseModel):
@@ -38,6 +108,7 @@ class SourceRead(BaseModel):
     health_status: str
     last_validation_at: datetime | None
     last_validation: dict[str, Any]
+    contacts: list[ReferralContactRead]
     created_at: datetime
     updated_at: datetime
 

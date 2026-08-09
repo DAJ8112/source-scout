@@ -54,6 +54,27 @@ class CareersSource(Base):
     jobs: Mapped[list[Job]] = relationship(
         back_populates="source", cascade="all, delete-orphan"
     )
+    contacts: Mapped[list[ReferralContact]] = relationship(
+        back_populates="source", cascade="all, delete-orphan", order_by="ReferralContact.name"
+    )
+
+
+class ReferralContact(Base):
+    __tablename__ = "referral_contacts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    source_id: Mapped[str] = mapped_column(ForeignKey("careers_sources.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(200))
+    contact_url: Mapped[str | None] = mapped_column(Text)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=now_utc, onupdate=now_utc
+    )
+
+    source: Mapped[CareersSource] = relationship(back_populates="contacts")
+
+    __table_args__ = (Index("ix_contact_source", "source_id"),)
 
 
 class ScanRun(Base):
