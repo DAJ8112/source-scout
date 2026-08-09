@@ -3,7 +3,16 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -27,7 +36,7 @@ from app.schemas import (
     SourceRead,
     ValidationResponse,
 )
-from app.services.scans import unfinished_scan_for_source
+from app.services.scans import execute_scan, unfinished_scan_for_source
 
 router = APIRouter(prefix="/api")
 
@@ -229,10 +238,12 @@ async def validate_source(
     response_model=ScanRead,
     status_code=status.HTTP_202_ACCEPTED,
 )
-def create_scan(
+async def create_scan(
     source_id: str,
     payload: ScanCreate,
     response: Response,
+    request: Request,
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ) -> ScanRun:
     source = source_or_404(session, source_id)
@@ -262,6 +273,7 @@ def create_scan(
         ) from exc
     session.refresh(scan)
     response.headers["Location"] = f"/api/scans/{scan.id}"
+    background_tasks.add_task(execute_scan, scan.id, request.app)
     return scan
 
 

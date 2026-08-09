@@ -10,6 +10,7 @@ dependencies = [
   "fastapi>=0.116,<1",
   "httpx>=0.28,<1",
   "pydantic>=2.11,<3",
+  "psycopg[binary]>=3.2,<4",
   "pypdf>=6,<7",
   "python-multipart>=0.0.20,<1",
   "sqlalchemy>=2.0,<3",
@@ -18,6 +19,7 @@ dependencies = [
 
 [project.scripts]
 referrals-worker = "app.worker:main"
+referrals-worker-once = "app.worker:once_main"
 
 [dependency-groups]
 dev = [

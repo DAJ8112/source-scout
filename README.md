@@ -16,7 +16,8 @@ viewed or dismissed, and dismissals remain reversible.
 
 Scheduled monitoring uses the relational database as a durable queue. A separate worker
 claims due scans, runs them independently of the web process, and advances each active
-source's next scan by six hours. Authentication and hosted deployment are future layers.
+source's next scan by six hours. Manual scans start immediately from the web process and
+remain recoverable by the scheduled worker if that process is interrupted.
 
 ## Prerequisites
 
@@ -84,3 +85,29 @@ REFERRALS_LIVE_TESTS=1 uv run pytest -m live -q
 Live tests assert successful nonzero traversal, never volatile exact counts.
 Sites can change or restrict automated access; a blocked or drifted source is
 reported as `setup_required` with diagnostics rather than bypassed.
+
+## Free hosted deployment
+
+The deployment files package the built React UI and FastAPI API into one Render Free
+web service. Persistent state lives in Neon Postgres, while GitHub Actions wakes a
+run-to-completion worker every six hours. Anthropic remains optional; leave its key
+unset to use deterministic local matching without API charges.
+
+1. Create a Neon project in an Ohio-compatible region and copy its pooled connection
+   string.
+2. Add that connection string as a GitHub repository secret named `DATABASE_URL`.
+3. Merge the deployment checkpoint into the repository's default branch. GitHub runs
+   scheduled workflows only from the default branch.
+4. In Render, create a Blueprint from this repository's `render.yaml` and provide the
+   same `DATABASE_URL` when prompted.
+5. After Render reports a healthy deploy, manually run the **Scheduled job scans**
+   workflow once to verify database access from GitHub Actions.
+
+The Render service can take about a minute to wake after being idle. Its local
+filesystem is intentionally unused for persistent data. The Docker start command
+runs Alembic migrations before starting the web server, and the scheduled workflow
+runs them again safely before processing due work.
+
+The hosted web service is publicly reachable unless application authentication is
+added. Do not upload a resume or referral contacts to a public deployment until an
+access-control choice has been implemented.

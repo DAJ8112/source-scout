@@ -126,7 +126,9 @@ def record_source_attempt(
     source.last_scan_attempt_at = finished_at
     if successful:
         source.last_successful_scan_at = finished_at
-    source.next_scan_at = finished_at + timedelta(seconds=settings.scan_interval_seconds)
+    interval = settings.scan_interval_seconds
+    next_boundary = ((int(finished_at.timestamp()) // interval) + 1) * interval
+    source.next_scan_at = datetime.fromtimestamp(next_boundary, UTC)
 
 
 async def execute_scan(scan_id: str, app) -> None:

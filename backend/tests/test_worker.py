@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from app.connectors.types import ScanOutput
 from app.models import Base, CareersSource, ScanRun
 from app.services.scans import enqueue_due_scans, recover_interrupted_runs
-from app.worker import run_worker_once
+from app.worker import drain_worker, run_worker_once
 
 
 def worker_factory(tmp_path):
@@ -101,6 +101,28 @@ async def test_worker_executes_durable_queue_and_advances_schedule(tmp_path, mon
         assert source.last_successful_scan_at is not None
         assert source.next_scan_at > source.last_successful_scan_at
     assert await run_worker_once(runtime, now) is False
+
+
+async def test_worker_drains_all_due_sources_before_becoming_idle(tmp_path, monkeypatch):
+    factory = worker_factory(tmp_path)
+    now = datetime.now(UTC)
+    add_source(factory, company="First", due=now - timedelta(minutes=1))
+    add_source(factory, company="Second", due=now - timedelta(minutes=1))
+
+    class FakeConnector:
+        async def scan(self, _url, _config):
+            return ScanOutput(jobs=[], pages_visited=1)
+
+    monkeypatch.setattr("app.services.scans.ConnectorRegistry.get", lambda *_args: FakeConnector())
+    runtime = SimpleNamespace(
+        state=SimpleNamespace(session_factory=factory, http=None, matcher=None, scan_tasks={})
+    )
+
+    processed = await drain_worker(runtime, now)
+
+    assert processed == 2
+    with factory() as session:
+        assert len(session.scalars(select(ScanRun)).all()) == 2
 
 
 def test_worker_recovery_preserves_queued_work_and_requeues_running_source(tmp_path):

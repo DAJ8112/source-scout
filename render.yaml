@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: referral-job-monitor
+    runtime: docker
+    plan: free
+    region: ohio
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    maxShutdownDelaySeconds: 300
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SCAN_INTERVAL_SECONDS
+        value: "21600"

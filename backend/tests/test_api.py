@@ -1,5 +1,6 @@
 from collections.abc import Generator
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -72,6 +73,45 @@ def test_jobs_pagination_returns_404_for_unknown_scan(tmp_path):
     app.dependency_overrides[get_session] = override_session
     with TestClient(app) as client:
         assert client.get("/api/scans/not-found/jobs").status_code == 404
+
+
+def test_manual_scan_is_dispatched_immediately_and_remains_durable(
+    tmp_path, monkeypatch
+):
+    engine = create_engine(f"sqlite:///{tmp_path / 'api-scan.db'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    with factory() as session:
+        source = CareersSource(
+            company="Example",
+            url="https://example.com/careers",
+            detected_platform="test",
+            connector_type="test_connector",
+            setup_status="ready",
+        )
+        session.add(source)
+        session.commit()
+        source_id = source.id
+
+    def override_session():
+        with factory() as session:
+            yield session
+
+    execute_scan = AsyncMock()
+    monkeypatch.setattr("app.api.routes.execute_scan", execute_scan)
+    app = create_app()
+    app.dependency_overrides[get_session] = override_session
+    with TestClient(app) as client:
+        app.state.session_factory = factory
+        response = client.post(
+            f"/api/sources/{source_id}/scans", json={"trigger": "manual"}
+        )
+
+    assert response.status_code == 202
+    scan_id = response.json()["id"]
+    execute_scan.assert_awaited_once_with(scan_id, app)
+    with factory() as session:
+        assert session.get(ScanRun, scan_id).status == "queued"
 
 
 def test_current_jobs_can_be_filtered_and_read(tmp_path):
