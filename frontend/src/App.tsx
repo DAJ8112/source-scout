@@ -3,6 +3,7 @@ import { api } from "./api";
 import type {
   FeedPage,
   Job,
+  JobUserStatePatch,
   Scan,
   SearchProfile,
   SearchProfilePatch,
@@ -322,7 +323,21 @@ function SourceCard({
   );
 }
 
-function MatchFeed({ feed, loading }: { feed: FeedPage | null; loading: boolean }) {
+function MatchFeed({
+  feed,
+  loading,
+  actionBusy,
+  showDismissed,
+  onToggleDismissed,
+  onUpdateState,
+}: {
+  feed: FeedPage | null;
+  loading: boolean;
+  actionBusy: string | null;
+  showDismissed: boolean;
+  onToggleDismissed: () => void;
+  onUpdateState: (jobId: string, payload: JobUserStatePatch) => Promise<void>;
+}) {
   const [showIrrelevant, setShowIrrelevant] = useState(false);
   const visibleItems = (feed?.items ?? []).filter(
     (item) => showIrrelevant || item.match?.classification !== "irrelevant",
@@ -336,17 +351,18 @@ function MatchFeed({ feed, loading }: { feed: FeedPage | null; loading: boolean 
     <section className="inventory">
       <div className="section-heading">
         <div><p className="eyebrow">Opportunity feed</p><h2>Active matches</h2></div>
-        <span>{feed?.total ?? 0} open</span>
+        <span>{feed?.total ?? 0} shown</span>
       </div>
       {feed && (
         <div className="feed-summary">
-          <span><strong>{counts.strong ?? 0}</strong> strong</span>
-          <span><strong>{counts.possible ?? 0}</strong> possible</span>
+          <span><strong>{feed.unseen_strong}</strong> unseen strong</span>
+          <span><strong>{feed.unseen_possible}</strong> unseen possible</span>
           <span><strong>{counts.unmatched ?? 0}</strong> unmatched</span>
           <span className={feed.provider_configured ? "provider-ready" : "provider-fallback"}>
             {feed.provider_configured ? "Claude configured" : "Local fallback · add ANTHROPIC_API_KEY"}
           </span>
           {(counts.irrelevant ?? 0) > 0 && <button className="text-button" type="button" onClick={() => setShowIrrelevant((value) => !value)}>{showIrrelevant ? "Hide irrelevant" : `Show ${counts.irrelevant} irrelevant`}</button>}
+          {(feed.dismissed_total > 0 || showDismissed) && <button className="text-button" type="button" onClick={onToggleDismissed}>{showDismissed ? "Hide dismissed" : `Show ${feed.dismissed_total} dismissed`}</button>}
         </div>
       )}
       {loading ? <p>Loading matches…</p> : !feed || feed.items.length === 0 ? (
@@ -356,17 +372,27 @@ function MatchFeed({ feed, loading }: { feed: FeedPage | null; loading: boolean 
           {visibleItems.map((item) => {
             const { job, match } = item;
             const classification = match?.classification ?? "unmatched";
+            const seen = Boolean(item.state?.seen_at);
+            const dismissed = Boolean(item.state?.dismissed_at);
             return (
-              <article className="job-card" key={job.id}>
+              <article className={`job-card${dismissed ? " job-dismissed" : ""}`} key={job.id}>
                 <div className="job-labels">
                   <span className={`match-class match-${classification}`}>{classification}</span>
-                  <span>{item.company}</span>
+                  <span>{item.company}{dismissed ? " · Dismissed" : seen ? " · Viewed" : ""}</span>
                 </div>
                 <h3><a href={job.canonical_url} target="_blank" rel="noreferrer">{job.title}</a></h3>
                 <p>{job.locations.join(" · ") || "Location not supplied"}</p>
                 <div className="job-meta">
                   <span>{job.initial_import ? "Existing at setup" : "New discovery"}</span>
                   {match && <span>{match.score}/100 · {match.provider === "anthropic" ? "Claude" : "Local fallback"}</span>}
+                </div>
+                <div className="job-actions">
+                  {!seen && !dismissed && <button className="secondary" type="button" disabled={actionBusy === job.id} onClick={() => onUpdateState(job.id, { seen: true })}>Mark viewed</button>}
+                  {dismissed ? (
+                    <button className="secondary" type="button" disabled={actionBusy === job.id} onClick={() => onUpdateState(job.id, { dismissed: false })}>Restore</button>
+                  ) : (
+                    <button className="text-button" type="button" disabled={actionBusy === job.id} onClick={() => onUpdateState(job.id, { dismissed: true })}>Dismiss</button>
+                  )}
                 </div>
                 {match && match.evidence.length > 0 && <ul className="match-reasons">{match.evidence.slice(0, 3).map((reason) => <li key={reason}>{reason}</li>)}</ul>}
                 {match && match.gaps.length > 0 && <details><summary>Important gaps</summary><ul className="match-gaps">{match.gaps.slice(0, 3).map((gap) => <li key={gap}>{gap}</li>)}</ul></details>}
@@ -397,22 +423,28 @@ export default function App() {
   const [profileBusy, setProfileBusy] = useState(false);
   const [feed, setFeed] = useState<FeedPage | null>(null);
   const [feedLoading, setFeedLoading] = useState(true);
+  const [showDismissed, setShowDismissed] = useState(false);
+  const [jobActionBusy, setJobActionBusy] = useState<string | null>(null);
 
-  const reloadFeed = useCallback(async () => {
+  const reloadFeed = useCallback(async (includeDismissed = showDismissed) => {
     try {
-      setFeed(await api.feed());
+      setFeed(await api.feed(includeDismissed));
     } catch (reason) {
       setError(messageOf(reason));
     } finally {
       setFeedLoading(false);
     }
-  }, []);
+  }, [showDismissed]);
 
   useEffect(() => {
     api.sources().then(setSources).catch((reason) => setError(messageOf(reason))).finally(() => setLoading(false));
     api.profile().then(setProfile).catch((reason) => setError(messageOf(reason)));
-    void reloadFeed();
-  }, [reloadFeed]);
+  }, []);
+
+  useEffect(() => {
+    setFeedLoading(true);
+    void reloadFeed(showDismissed);
+  }, [reloadFeed, showDismissed]);
 
   async function rematch() {
     setProfileBusy(true);
@@ -458,6 +490,19 @@ export default function App() {
       setError(messageOf(reason));
     } finally {
       setProfileBusy(false);
+    }
+  }
+
+  async function updateJobState(jobId: string, payload: JobUserStatePatch) {
+    setJobActionBusy(jobId);
+    setError("");
+    try {
+      await api.patchJobState(jobId, payload);
+      await reloadFeed(showDismissed);
+    } catch (reason) {
+      setError(messageOf(reason));
+    } finally {
+      setJobActionBusy(null);
     }
   }
 
@@ -507,7 +552,14 @@ export default function App() {
         </form>
       </section>
 
-      <MatchFeed feed={feed} loading={feedLoading} />
+      <MatchFeed
+        feed={feed}
+        loading={feedLoading}
+        actionBusy={jobActionBusy}
+        showDismissed={showDismissed}
+        onToggleDismissed={() => setShowDismissed((value) => !value)}
+        onUpdateState={updateJobState}
+      />
 
       <section className="source-list">
         <div className="section-heading"><h2>Sources</h2><span>{sources.length} configured</span></div>

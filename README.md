@@ -11,10 +11,10 @@ The web app also stores referral contacts, extracts editable text from a resume 
 captures job preferences, and ranks active jobs with hybrid matching. Explicit local
 constraints run first; eligible jobs are evaluated by Claude using structured output.
 Results are cached by profile version and job content. If Claude is unavailable or
-not configured, the app falls back to deterministic local scoring.
+not configured, the app falls back to deterministic local scoring. Jobs can be marked
+viewed or dismissed, and dismissals remain reversible.
 
-Job actions, authentication, scheduling, durable queues, and hosted deployment are
-future layers.
+Authentication, scheduling, durable queues, and hosted deployment are future layers.
 
 ## Prerequisites
 

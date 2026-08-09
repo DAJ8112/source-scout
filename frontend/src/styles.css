@@ -64,6 +64,7 @@ fieldset { border: 1px solid #dce4dd; border-radius: 12px; margin: 1rem 0; }
 .feed-summary .provider-ready { background: #d7f2e5; color: #126442; }
 .feed-summary .provider-fallback { background: #fff1ce; color: #724a00; }
 .job-card { border: 1px solid #dfe7e0; border-radius: 14px; padding: 1rem; background: #fbfcfa; }
+.job-card.job-dismissed { opacity: .72; background: #f1f3f0; }
 .job-card h3 { margin: .8rem 0 .35rem; }
 .job-card p { margin: 0; color: #708078; }
 .job-labels { display: flex; justify-content: space-between; align-items: center; gap: .5rem; font-size: .78rem; color: #5e746c; }
@@ -73,6 +74,8 @@ fieldset { border: 1px solid #dce4dd; border-radius: 12px; margin: 1rem 0; }
 .match-irrelevant { background: #edf1ed; color: #63716c; }
 .match-unmatched { background: #e8edf7; color: #405779; }
 .job-meta { display: flex; justify-content: space-between; gap: .7rem; margin-top: .8rem; color: #708078; font-size: .78rem; }
+.job-actions { display: flex; gap: .45rem; align-items: center; margin-top: .8rem; }
+.job-actions button { padding: .5rem .8rem; font-size: .78rem; }
 .match-reasons, .match-gaps { padding-left: 1.2rem; font-size: .85rem; line-height: 1.45; }
 .match-reasons { color: #315d50; }
 .match-gaps { color: #77573b; }

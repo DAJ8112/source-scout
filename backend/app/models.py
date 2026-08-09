@@ -162,11 +162,33 @@ class Job(Base):
     match_results: Mapped[list[MatchResult]] = relationship(
         back_populates="job", cascade="all, delete-orphan"
     )
+    user_state: Mapped[JobUserState | None] = relationship(
+        back_populates="job", cascade="all, delete-orphan", uselist=False
+    )
 
     __table_args__ = (
         UniqueConstraint("source_id", "identity_key", name="uq_job_source_identity"),
         Index("ix_job_source_lifecycle", "source_id", "lifecycle_status"),
     )
+
+
+class JobUserState(Base):
+    __tablename__ = "job_user_states"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    job_id: Mapped[str] = mapped_column(
+        ForeignKey("jobs.id", ondelete="CASCADE"), unique=True
+    )
+    seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    dismissed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=now_utc, onupdate=now_utc
+    )
+
+    job: Mapped[Job] = relationship(back_populates="user_state")
+
+    __table_args__ = (Index("ix_job_user_state_dismissed", "dismissed_at"),)
 
 
 class MatchResult(Base):

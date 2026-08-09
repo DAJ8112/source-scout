@@ -229,6 +229,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jobs/{job_id}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Job State */
+        patch: operations["patch_job_state_api_jobs__job_id__state_patch"];
+        trace?: never;
+    };
     "/api/feed": {
         parameters: {
             query?: never;
@@ -346,6 +363,7 @@ export interface components {
             /** Contacts */
             contacts: components["schemas"]["ReferralContactRead"][];
             match: components["schemas"]["MatchResultRead"] | null;
+            state: components["schemas"]["JobUserStateRead"] | null;
         };
         /** FeedPage */
         FeedPage: {
@@ -357,6 +375,12 @@ export interface components {
             profile_ready: boolean;
             /** Provider Configured */
             provider_configured: boolean;
+            /** Unseen Strong */
+            unseen_strong: number;
+            /** Unseen Possible */
+            unseen_possible: number;
+            /** Dismissed Total */
+            dismissed_total: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -398,6 +422,34 @@ export interface components {
              * Format: date-time
              */
             observed_at: string;
+        };
+        /** JobUserStatePatch */
+        JobUserStatePatch: {
+            /** Seen */
+            seen?: boolean | null;
+            /** Dismissed */
+            dismissed?: boolean | null;
+        };
+        /** JobUserStateRead */
+        JobUserStateRead: {
+            /** Id */
+            id: string;
+            /** Job Id */
+            job_id: string;
+            /** Seen At */
+            seen_at: string | null;
+            /** Dismissed At */
+            dismissed_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /** JobsPage */
         JobsPage: {
@@ -1264,10 +1316,46 @@ export interface operations {
             };
         };
     };
+    patch_job_state_api_jobs__job_id__state_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobUserStatePatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobUserStateRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_feed_api_feed_get: {
         parameters: {
             query?: {
                 classification?: ("strong" | "possible" | "irrelevant" | "unmatched") | null;
+                include_dismissed?: boolean;
             };
             header?: never;
             path?: never;

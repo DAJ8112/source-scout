@@ -1,6 +1,8 @@
 import type {
   CurrentJobsPage,
   FeedPage,
+  JobUserState,
+  JobUserStatePatch,
   JobsPage,
   ReferralContact,
   RematchResponse,
@@ -78,5 +80,11 @@ export const api = {
     return request<SearchProfile>("/api/profile/resume", { method: "POST", body });
   },
   rematch: () => request<RematchResponse>("/api/profile/rematch", { method: "POST" }),
-  feed: () => request<FeedPage>("/api/feed"),
+  feed: (includeDismissed = false) =>
+    request<FeedPage>(`/api/feed${includeDismissed ? "?include_dismissed=true" : ""}`),
+  patchJobState: (jobId: string, payload: JobUserStatePatch) =>
+    request<JobUserState>(`/api/jobs/${jobId}/state`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
 };

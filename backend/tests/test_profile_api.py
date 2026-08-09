@@ -46,6 +46,7 @@ def add_active_job(factory):
         )
         session.add(job)
         session.commit()
+        return job.id
 
 
 def test_profile_resume_rematch_and_feed(tmp_path, monkeypatch):
@@ -97,6 +98,41 @@ def test_profile_resume_rematch_and_feed(tmp_path, monkeypatch):
         assert feed["provider_configured"] is False
         assert feed["items"][0]["match"]["provider"] == "local"
         assert feed["items"][0]["company"] == "Example"
+        assert feed["items"][0]["state"] is None
+        assert feed["unseen_strong"] + feed["unseen_possible"] == 1
+
+
+def test_job_seen_and_dismissed_state_controls_feed(tmp_path):
+    factory = profile_api_factory(tmp_path)
+    job_id = add_active_job(factory)
+
+    def override_session():
+        with factory() as session:
+            yield session
+
+    app = create_app()
+    app.dependency_overrides[get_session] = override_session
+    with TestClient(app) as client:
+        viewed = client.patch(f"/api/jobs/{job_id}/state", json={"seen": True})
+        assert viewed.status_code == 200
+        assert viewed.json()["seen_at"] is not None
+
+        dismissed = client.patch(f"/api/jobs/{job_id}/state", json={"dismissed": True})
+        assert dismissed.status_code == 200
+        assert dismissed.json()["dismissed_at"] is not None
+        assert client.get("/api/feed").json()["items"] == []
+
+        included = client.get("/api/feed?include_dismissed=true").json()
+        assert included["dismissed_total"] == 1
+        assert included["items"][0]["state"]["seen_at"] is not None
+
+        restored = client.patch(f"/api/jobs/{job_id}/state", json={"dismissed": False})
+        assert restored.status_code == 200
+        assert restored.json()["dismissed_at"] is None
+        assert len(client.get("/api/feed").json()["items"]) == 1
+
+        assert client.patch(f"/api/jobs/{job_id}/state", json={}).status_code == 422
+        assert client.patch("/api/jobs/missing/state", json={"seen": True}).status_code == 404
 
 
 def test_resume_upload_validation(tmp_path):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
@@ -10,11 +11,13 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
 from app.db import get_session
-from app.models import CareersSource, Job, MatchResult
+from app.models import CareersSource, Job, JobUserState, MatchResult
 from app.schemas import (
     CurrentJobRead,
     FeedItem,
     FeedPage,
+    JobUserStatePatch,
+    JobUserStateRead,
     MatchResultRead,
     RematchResponse,
     SearchProfilePatch,
@@ -85,10 +88,33 @@ async def rematch_profile(request: Request, session: Session = Depends(get_sessi
     return RematchResponse(**summary.__dict__)
 
 
+@router.patch("/jobs/{job_id}/state", response_model=JobUserStateRead)
+def patch_job_state(
+    job_id: str,
+    payload: JobUserStatePatch,
+    session: Session = Depends(get_session),
+):
+    if not session.get(Job, job_id):
+        raise HTTPException(status_code=404, detail="Job not found")
+    user_state = session.scalar(select(JobUserState).where(JobUserState.job_id == job_id))
+    if not user_state:
+        user_state = JobUserState(job_id=job_id)
+        session.add(user_state)
+    now = datetime.now(UTC)
+    if "seen" in payload.model_fields_set:
+        user_state.seen_at = now if payload.seen else None
+    if "dismissed" in payload.model_fields_set:
+        user_state.dismissed_at = now if payload.dismissed else None
+    session.commit()
+    session.refresh(user_state)
+    return user_state
+
+
 @router.get("/feed", response_model=FeedPage)
 def get_feed(
     request: Request,
     classification: Literal["strong", "possible", "irrelevant", "unmatched"] | None = None,
+    include_dismissed: bool = False,
     session: Session = Depends(get_session),
 ) -> FeedPage:
     profile = get_or_create_profile(session)
@@ -114,10 +140,34 @@ def get_feed(
         for match in matches
         if fingerprint_by_job.get(match.job_id) == match.job_content_fingerprint
     }
+    states = (
+        list(
+            session.scalars(
+                select(JobUserState).where(JobUserState.job_id.in_(fingerprint_by_job))
+            )
+        )
+        if fingerprint_by_job
+        else []
+    )
+    state_by_job = {state.job_id: state for state in states}
+    unseen_strong = 0
+    unseen_possible = 0
+    dismissed_total = 0
     items = []
     for job in jobs:
         match = match_by_job.get(job.id)
+        user_state = state_by_job.get(job.id)
         item_class = match.classification if match else "unmatched"
+        dismissed = bool(user_state and user_state.dismissed_at)
+        if dismissed:
+            dismissed_total += 1
+        elif not user_state or not user_state.seen_at:
+            if item_class == "strong":
+                unseen_strong += 1
+            elif item_class == "possible":
+                unseen_possible += 1
+        if dismissed and not include_dismissed:
+            continue
         if classification and item_class != classification:
             continue
         items.append(
@@ -126,6 +176,7 @@ def get_feed(
                 company=job.source.company,
                 contacts=job.source.contacts,
                 match=MatchResultRead.model_validate(match) if match else None,
+                state=JobUserStateRead.model_validate(user_state) if user_state else None,
             )
         )
     priority = {"strong": 0, "possible": 1, "irrelevant": 2, "unmatched": 3}
@@ -142,4 +193,7 @@ def get_feed(
         total=len(items),
         profile_ready=profile_ready(profile),
         provider_configured=matcher.client is not None,
+        unseen_strong=unseen_strong,
+        unseen_possible=unseen_possible,
+        dismissed_total=dismissed_total,
     )

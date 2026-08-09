@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
 
 from app.connectors.types import ValidationResult
 
@@ -310,11 +310,36 @@ class MatchResultRead(BaseModel):
     evaluated_at: datetime
 
 
+class JobUserStatePatch(BaseModel):
+    seen: bool | None = None
+    dismissed: bool | None = None
+
+    @model_validator(mode="after")
+    def require_action(self):
+        if not self.model_fields_set:
+            raise ValueError("set seen or dismissed")
+        if any(getattr(self, field) is None for field in self.model_fields_set):
+            raise ValueError("job state values cannot be null")
+        return self
+
+
+class JobUserStateRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    job_id: str
+    seen_at: datetime | None
+    dismissed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class FeedItem(BaseModel):
     job: CurrentJobRead
     company: str
     contacts: list[ReferralContactRead]
     match: MatchResultRead | None
+    state: JobUserStateRead | None
 
 
 class FeedPage(BaseModel):
@@ -322,6 +347,9 @@ class FeedPage(BaseModel):
     total: int
     profile_ready: bool
     provider_configured: bool
+    unseen_strong: int
+    unseen_possible: int
+    dismissed_total: int
 
 
 class RematchResponse(BaseModel):

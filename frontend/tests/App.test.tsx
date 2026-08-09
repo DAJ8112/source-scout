@@ -18,7 +18,10 @@ const profile = {
   created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
 };
 
-const emptyFeed = { items: [], total: 0, profile_ready: false, provider_configured: false };
+const emptyFeed = {
+  items: [], total: 0, profile_ready: false, provider_configured: false,
+  unseen_strong: 0, unseen_possible: 0, dismissed_total: 0,
+};
 
 const currentJob = {
   id: "current-1", source_id: source.id, external_id: "R1", canonical_url: "https://example.com/job/1",
@@ -43,13 +46,13 @@ function response(body: unknown, status = 200) {
   return Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }));
 }
 
-type Override = (url: string, method: string) => Promise<Response> | undefined;
+type Override = (url: string, method: string, init?: RequestInit) => Promise<Response> | undefined;
 
 function mockApi(override?: Override) {
   return vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
     const url = String(input);
     const method = init?.method ?? "GET";
-    const custom = override?.(url, method);
+    const custom = override?.(url, method, init);
     if (custom) return custom;
     if (url === "/api/sources" && method === "GET") return response([]);
     if (url === "/api/profile" && method === "GET") return response(profile);
@@ -86,8 +89,9 @@ test("polls a scan and refreshes the ranked feed", async () => {
     if (url === "/api/feed" && method === "GET") {
       feedCalls += 1;
       return response(feedCalls === 1 ? emptyFeed : {
-        items: [{ job: currentJob, company: source.company, contacts: [], match }],
+        items: [{ job: currentJob, company: source.company, contacts: [], match, state: null }],
         total: 1, profile_ready: true, provider_configured: false,
+        unseen_strong: 1, unseen_possible: 0, dismissed_total: 0,
       });
     }
     if (url === `/api/sources/${source.id}/scans` && method === "POST") return response({
@@ -128,8 +132,9 @@ test("saves a profile, runs matching, and renders explanations", async () => {
       evaluated: 1, cached: 0, ai_succeeded: 0, local_fallbacks: 1, failed: 0,
     });
     if (url === "/api/feed" && method === "GET") return response({
-      items: [{ job: currentJob, company: source.company, contacts: [], match }],
+      items: [{ job: currentJob, company: source.company, contacts: [], match, state: null }],
       total: 1, profile_ready: true, provider_configured: false,
+      unseen_strong: 1, unseen_possible: 0, dismissed_total: 0,
     });
   });
   render(<App />);
@@ -138,7 +143,52 @@ test("saves a profile, runs matching, and renders explanations", async () => {
   await user.type(screen.getByLabelText("Editable resume text"), "Built Python pipelines.");
   await user.click(screen.getByRole("button", { name: "Save profile" }));
   expect(await screen.findByText("Python and data-pipeline experience align")).toBeInTheDocument();
-  expect(screen.getByText((_content, node) => node?.textContent === "1 strong")).toBeInTheDocument();
+  expect(screen.getByText((_content, node) => node?.textContent === "1 unseen strong")).toBeInTheDocument();
+});
+
+test("marks jobs viewed, dismisses them, and restores them", async () => {
+  let seen = false;
+  let dismissed = false;
+  mockApi((url, method, init) => {
+    if (url.startsWith("/api/feed") && method === "GET") {
+      const includeDismissed = url.includes("include_dismissed=true");
+      const state = seen || dismissed ? {
+        id: "state-1", job_id: currentJob.id,
+        seen_at: seen ? "2026-01-02T00:00:00Z" : null,
+        dismissed_at: dismissed ? "2026-01-02T00:00:00Z" : null,
+        created_at: "2026-01-02T00:00:00Z", updated_at: "2026-01-02T00:00:00Z",
+      } : null;
+      const visible = !dismissed || includeDismissed;
+      return response({
+        items: visible ? [{ job: currentJob, company: source.company, contacts: [], match, state }] : [],
+        total: visible ? 1 : 0, profile_ready: true, provider_configured: false,
+        unseen_strong: seen || dismissed ? 0 : 1, unseen_possible: 0,
+        dismissed_total: dismissed ? 1 : 0,
+      });
+    }
+    if (url === `/api/jobs/${currentJob.id}/state` && method === "PATCH") {
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      if ("seen" in body) seen = body.seen;
+      if ("dismissed" in body) dismissed = body.dismissed;
+      return response({
+        id: "state-1", job_id: currentJob.id,
+        seen_at: seen ? "2026-01-02T00:00:00Z" : null,
+        dismissed_at: dismissed ? "2026-01-02T00:00:00Z" : null,
+        created_at: "2026-01-02T00:00:00Z", updated_at: "2026-01-02T00:00:00Z",
+      });
+    }
+  });
+  render(<App />);
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: "Mark viewed" }));
+  expect(await screen.findByText(/Viewed/)).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Dismiss" }));
+  expect(await screen.findByRole("button", { name: "Show 1 dismissed" })).toBeInTheDocument();
+  expect(screen.queryByText("Durable Data Engineer")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Show 1 dismissed" }));
+  expect(await screen.findByText(/Dismissed/)).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Restore" }));
+  expect(await screen.findByRole("button", { name: "Dismiss" })).toBeInTheDocument();
 });
 
 test("shows API errors during onboarding", async () => {
