@@ -1,4 +1,18 @@
-import type { JobsPage, Scan, Source, ValidationResult } from "./api.types";
+import type {
+  CurrentJobsPage,
+  FeedPage,
+  JobUserState,
+  JobUserStatePatch,
+  JobsPage,
+  ReferralContact,
+  RematchResponse,
+  Scan,
+  SearchProfile,
+  SearchProfilePatch,
+  Source,
+  SourcePatch,
+  ValidationResult,
+} from "./api.types";
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -7,8 +21,9 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const isFormData = init?.body instanceof FormData;
   const response = await fetch(path, {
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: { ...(isFormData ? {} : { "Content-Type": "application/json" }), ...init?.headers },
     ...init,
   });
   if (!response.ok) {
@@ -21,6 +36,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new ApiError(response.status, message);
   }
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
@@ -28,10 +44,10 @@ export const api = {
   sources: () => request<Source[]>("/api/sources"),
   createSource: (company: string, url: string) =>
     request<Source>("/api/sources", { method: "POST", body: JSON.stringify({ company, url }) }),
-  patchSource: (id: string, connector_config: Record<string, unknown>) =>
+  patchSource: (id: string, payload: SourcePatch) =>
     request<Source>(`/api/sources/${id}`, {
       method: "PATCH",
-      body: JSON.stringify({ connector_config }),
+      body: JSON.stringify(payload),
     }),
   validateSource: (id: string) =>
     request<{ source: Source; validation: ValidationResult }>(`/api/sources/${id}/validate`, {
@@ -44,4 +60,32 @@ export const api = {
     }),
   scan: (id: string) => request<Scan>(`/api/scans/${id}`),
   jobs: (id: string, page = 1) => request<JobsPage>(`/api/scans/${id}/jobs?page=${page}&page_size=25`),
+  currentJobs: () => request<CurrentJobsPage>("/api/jobs?lifecycle_status=active&page_size=100"),
+  createContact: (sourceId: string, name: string, contact_url: string, notes: string) =>
+    request<ReferralContact>(`/api/sources/${sourceId}/contacts`, {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        contact_url: contact_url || null,
+        notes: notes || null,
+      }),
+    }),
+  deleteContact: (sourceId: string, contactId: string) =>
+    request<void>(`/api/sources/${sourceId}/contacts/${contactId}`, { method: "DELETE" }),
+  profile: () => request<SearchProfile>("/api/profile"),
+  patchProfile: (payload: SearchProfilePatch) =>
+    request<SearchProfile>("/api/profile", { method: "PATCH", body: JSON.stringify(payload) }),
+  uploadResume: (file: File) => {
+    const body = new FormData();
+    body.append("file", file);
+    return request<SearchProfile>("/api/profile/resume", { method: "POST", body });
+  },
+  rematch: () => request<RematchResponse>("/api/profile/rematch", { method: "POST" }),
+  feed: (includeDismissed = false) =>
+    request<FeedPage>(`/api/feed${includeDismissed ? "?include_dismissed=true" : ""}`),
+  patchJobState: (jobId: string, payload: JobUserStatePatch) =>
+    request<JobUserState>(`/api/jobs/${jobId}/state`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
 };

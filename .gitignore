@@ -11,6 +11,7 @@ backend/referrals.db
 backend/*.db-shm
 backend/*.db-wal
 frontend/node_modules/
+/.pnpm-store/
 frontend/dist/
 frontend/coverage/
 frontend/*.tsbuildinfo

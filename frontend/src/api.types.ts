@@ -38,6 +38,7 @@ export type Source = Omit<
   detection: Record<string, unknown>;
   last_validation: ValidationResult | Record<string, never>;
 };
+export type SourcePatch = components["schemas"]["SourcePatch"];
 
 type GeneratedScan = components["schemas"]["ScanRead"];
 export type Scan = Omit<GeneratedScan, "progress" | "warnings" | "error_diagnostics"> & {
@@ -48,3 +49,14 @@ export type Scan = Omit<GeneratedScan, "progress" | "warnings" | "error_diagnost
 
 export type Job = components["schemas"]["JobRead"];
 export type JobsPage = components["schemas"]["JobsPage"];
+export type CurrentJob = components["schemas"]["CurrentJobRead"];
+export type CurrentJobsPage = components["schemas"]["CurrentJobsPage"];
+export type ReferralContact = components["schemas"]["ReferralContactRead"];
+export type SearchProfile = components["schemas"]["SearchProfileRead"];
+export type SearchProfilePatch = components["schemas"]["SearchProfilePatch"];
+export type MatchResult = components["schemas"]["MatchResultRead"];
+export type JobUserState = components["schemas"]["JobUserStateRead"];
+export type JobUserStatePatch = components["schemas"]["JobUserStatePatch"];
+export type FeedItem = components["schemas"]["FeedItem"];
+export type FeedPage = components["schemas"]["FeedPage"];
+export type RematchResponse = components["schemas"]["RematchResponse"];

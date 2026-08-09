@@ -55,6 +55,8 @@ The system must never silently treat a failed scan as proof that no new jobs exi
 ### 4.3 Scan schedule
 
 - Every active company is scanned every six hours.
+- The relational database is the durable MVP scan queue; no Redis service is required.
+- A separate worker process schedules due sources and executes queued scans independently of the web process.
 - Adding a company triggers an immediate validation and test scan.
 - A manual **Scan now** action should be available.
 - Scan work runs independently of the web interface.
@@ -145,6 +147,12 @@ Each company may contain simple referral-contact records with:
 
 Contacts are displayed with matching roles from their company. The MVP does not generate messages, send outreach, or attempt to become a full networking CRM.
 
+### 4.12 Job review state
+
+- The MVP stores **seen** and **dismissed** state for each job.
+- Dismissed jobs are hidden from the default feed but remain inspectable and restorable.
+- A separate saved-job shortlist is intentionally excluded from the MVP.
+
 ## 5. Primary user workflows
 
 ### 5.1 Initial setup
@@ -173,7 +181,7 @@ Contacts are displayed with matching roles from their company. The MVP does not 
 3. Open a role and inspect its match explanation.
 4. Open the official posting in a new tab.
 5. View the referral contacts for the company.
-6. Save, dismiss, or mark the role as viewed.
+6. Dismiss or mark the role as viewed.
 
 ### 5.4 Diagnose monitoring
 
@@ -248,7 +256,7 @@ Start with a modular monolith: one repository and one application codebase with 
 flowchart LR
     Browser["Web browser"] --> Web["Web application and API"]
     Web --> DB["Relational database"]
-    Scheduler["Six-hour scheduler"] --> Queue["Scan job queue"]
+    Scheduler["Six-hour scheduler"] --> Queue["Database-backed scan queue"]
     Queue --> Worker["Scanning worker"]
     Worker --> Official["Official careers pages"]
     Worker --> Normalizer["Job normalizer and deduplicator"]
@@ -266,7 +274,7 @@ flowchart LR
 - `scans`: scheduling, queueing, retries, and scan history
 - `jobs`: normalization, deduplication, versioning, and lifecycle
 - `matching`: hard constraints, semantic scoring, classification, and explanations
-- `feed`: job queries, seen state, saved state, and dismissals
+- `feed`: job queries, seen state, and dismissals
 
 Avoid separate microservices until scaling or isolation requirements make them necessary.
 
@@ -457,7 +465,6 @@ This can be deferred if full version history is unnecessary for the first implem
 - `job_id`
 - `user_id`
 - seen time
-- saved time
 - dismissed time
 
 ## 10. Scan and job-processing sequence
@@ -573,7 +580,7 @@ The first version does not include:
 
 These choices were not finalized in the initial discussion and should be resolved before or during implementation:
 
-1. **Technology stack:** frontend framework, backend runtime, relational database, job queue, browser automation library, and hosting provider.
+1. **Remaining technology choices:** browser automation library and hosting provider.
 2. **Authentication:** minimal single-user login versus a production-ready authentication provider from the start.
 3. **Preference schema:** exact fields and whether each uses `must satisfy`, `prefer`, and `no preference` states. The three-level approach is recommended but was not formally locked.
 4. **Semantic matching implementation:** embeddings, an LLM-based evaluator, a hybrid, or another approach; also cost, latency, privacy, and reproducibility requirements.
@@ -584,7 +591,6 @@ These choices were not finalized in the initial discussion and should be resolve
 9. **Removal behavior:** whether deleting a company is allowed and whether it archives or permanently removes its job history.
 10. **Resume storage:** retention, encryption, deletion, and whether the original PDF is kept after text extraction.
 11. **Site access policy:** request identification, rate limits, robots directives, and terms review for each connector type.
-12. **Job actions:** whether `seen`, `saved`, and `dismissed` are all required for the first release.
 
 ## 15. Recommended implementation order
 
@@ -621,7 +627,7 @@ These choices were not finalized in the initial discussion and should be resolve
 ### Milestone 5: Product feed
 
 - Build the dashboard, feed, job detail, companies, profile, and history views.
-- Add seen, save, dismiss, filters, and search as selected.
+- Add seen, dismiss, filters, and search as selected.
 - Display contacts alongside matching company jobs.
 
 ### Milestone 6: Reliable automation
@@ -666,4 +672,3 @@ The MVP is ready for personal use when:
 5. **Configuration before custom code:** Reuse portal and page-pattern logic wherever possible.
 6. **Human-controlled action:** The product discovers and organizes; it does not contact people or apply automatically.
 7. **Build from real sources:** Expand connector coverage in response to actual companies instead of attempting a universal scraper before validating the product.
-
