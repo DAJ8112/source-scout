@@ -99,7 +99,8 @@ unset to use deterministic local matching without API charges.
 3. Merge the deployment checkpoint into the repository's default branch. GitHub runs
    scheduled workflows only from the default branch.
 4. In Render, create a Blueprint from this repository's `render.yaml` and provide the
-   same `DATABASE_URL` when prompted.
+   same `DATABASE_URL` plus a strong `APP_PASSWORD` when prompted. The hosted username
+   is `referrals` unless `APP_USERNAME` is changed in Render.
 5. After Render reports a healthy deploy, manually run the **Scheduled job scans**
    workflow once to verify database access from GitHub Actions.
 
@@ -108,6 +109,7 @@ filesystem is intentionally unused for persistent data. The Docker start command
 runs Alembic migrations before starting the web server, and the scheduled workflow
 runs them again safely before processing due work.
 
-The hosted web service is publicly reachable unless application authentication is
-added. Do not upload a resume or referral contacts to a public deployment until an
-access-control choice has been implemented.
+The hosted UI and API require HTTP Basic authentication. Render terminates HTTPS before
+forwarding traffic to the app, so credentials are encrypted in transit. `/health` is
+the only unauthenticated endpoint. Local development remains open unless
+`REFERRALS_AUTH_REQUIRED=true` is set.

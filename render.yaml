@@ -11,5 +11,11 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false
+      - key: REFERRALS_AUTH_REQUIRED
+        value: "true"
+      - key: APP_USERNAME
+        value: referrals
+      - key: APP_PASSWORD
+        sync: false
       - key: SCAN_INTERVAL_SECONDS
         value: "21600"

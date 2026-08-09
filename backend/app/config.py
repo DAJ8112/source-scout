@@ -2,10 +2,25 @@ import os
 from dataclasses import dataclass
 
 
+def environment_flag(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    normalized = value.strip().casefold()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be true or false")
+
+
 @dataclass(frozen=True)
 class Settings:
     database_url: str = os.getenv("DATABASE_URL", "sqlite:///./referrals.db")
     frontend_dist: str | None = os.getenv("FRONTEND_DIST")
+    auth_required: bool = environment_flag("REFERRALS_AUTH_REQUIRED")
+    app_username: str = os.getenv("APP_USERNAME", "referrals")
+    app_password: str | None = os.getenv("APP_PASSWORD")
     request_timeout_seconds: float = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "30"))
     host_interval_seconds: float = float(os.getenv("HOST_INTERVAL_SECONDS", "1"))
     max_transient_retries: int = 3

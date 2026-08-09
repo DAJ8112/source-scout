@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.profile_routes import router as profile_router
 from app.api.routes import router
+from app.auth import BasicAuthMiddleware
 from app.config import settings
 from app.connectors.http import SafeHttpClient
 from app.db import SessionLocal
@@ -27,11 +28,21 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    if settings.auth_required and (not settings.app_username or not settings.app_password):
+        raise RuntimeError(
+            "APP_USERNAME and APP_PASSWORD must be set when REFERRALS_AUTH_REQUIRED is true"
+        )
     app = FastAPI(
         title="Referral Job Monitor Connector Lab",
         version="0.1.0",
         lifespan=lifespan,
     )
+    if settings.auth_required:
+        app.add_middleware(
+            BasicAuthMiddleware,
+            username=settings.app_username,
+            password=settings.app_password,
+        )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:5173"],
