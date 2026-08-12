@@ -38,6 +38,11 @@ from app.connectors.registry import ConnectorRegistry
             "icims_jibe",
             "icims_jibe_api",
         ),
+        (
+            "https://bloomberg.avature.net/careers/SearchJobs",
+            "avature",
+            "avature_html",
+        ),
     ],
 )
 async def test_detection_contract(url, platform, connector):
@@ -86,4 +91,21 @@ async def test_oracle_detection_discovers_public_api_coordinates(url):
     assert result.connector_type == "oracle_ce_rest"
     assert result.config["api_base_url"] == "https://tenant.fa.ocs.oraclecloud.com"
     assert result.config["site_number"] == "CX_1"
+    await client.close()
+
+
+@respx.mock
+async def test_hirebridge_detection_discovers_iframe_and_client(fixture_text):
+    url = "https://www.prgx.com/company/careers/"
+    respx.get("https://www.prgx.com/robots.txt").mock(
+        return_value=httpx.Response(200, text="User-agent: *\nAllow: /")
+    )
+    respx.get(url).mock(
+        return_value=httpx.Response(200, text=fixture_text("hirebridge/outer.html"))
+    )
+    client = SafeHttpClient(httpx.AsyncClient(), interval_seconds=0)
+    _, result = await ConnectorRegistry(client).detect(url)
+    assert result.platform == "hirebridge"
+    assert result.connector_type == "hirebridge_html"
+    assert result.config["client_id"] == "7765"
     await client.close()

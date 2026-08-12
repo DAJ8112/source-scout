@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from urllib.parse import urlsplit
 
+from app.connectors.avature import AvatureConnector
 from app.connectors.base import CareersConnector
 from app.connectors.errors import ConnectorError
+from app.connectors.hirebridge import HirebridgeConnector
 from app.connectors.html_jsonld import HtmlJsonLdConnector
 from app.connectors.http import SafeHttpClient
 from app.connectors.icims_jibe import IcimsJibeConnector
@@ -92,6 +94,10 @@ class ConnectorRegistry:
             connector = IcimsJibeConnector(self.http)
         elif host == "careers.honeywell.com" or host.endswith(".fa.oraclecloud.com"):
             connector = OracleCeConnector(self.http)
+        elif host in {"prgx.com", "www.prgx.com"} and path.startswith("/company/careers"):
+            connector = HirebridgeConnector(self.http)
+        elif host == "bloomberg.avature.net" and path.startswith("/careers/SearchJobs"):
+            connector = AvatureConnector(self.http)
         else:
             raise ConnectorError(
                 "unsupported_source",
@@ -117,6 +123,10 @@ class ConnectorRegistry:
             return IcimsJibeConnector(self.http)
         if connector_type == "oracle_ce_rest":
             return OracleCeConnector(self.http)
+        if connector_type == "hirebridge_html":
+            return HirebridgeConnector(self.http)
+        if connector_type == "avature_html":
+            return AvatureConnector(self.http)
         raise ConnectorError("unsupported_connector", f"Unknown connector {connector_type!r}")
 
 

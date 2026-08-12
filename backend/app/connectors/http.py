@@ -96,7 +96,7 @@ class SafeHttpClient:
                 await self.sleep(self._retry_after(response, attempts))
                 attempts += 1
                 continue
-            if response.status_code in {401, 403}:
+            if response.status_code in {401, 403, 406}:
                 raise ConnectorError(
                     "access_blocked",
                     f"Official source returned HTTP {response.status_code}; no bypass was attempted",
