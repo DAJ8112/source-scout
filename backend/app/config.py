@@ -1,5 +1,5 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 def environment_flag(name: str, default: bool = False) -> bool:
@@ -30,6 +30,9 @@ class Settings:
     max_resume_upload_bytes: int = int(os.getenv("MAX_RESUME_UPLOAD_BYTES", str(10 * 1024 * 1024)))
     scan_interval_seconds: int = int(os.getenv("SCAN_INTERVAL_SECONDS", str(6 * 60 * 60)))
     worker_poll_seconds: float = float(os.getenv("WORKER_POLL_SECONDS", "5"))
+    scan_concurrency: int = field(
+        default_factory=lambda: max(1, int(os.getenv("SCAN_CONCURRENCY", "3")))
+    )
     scan_stale_after_seconds: int = int(os.getenv("SCAN_STALE_AFTER_SECONDS", str(60 * 60)))
     user_agent: str = os.getenv(
         "REFERRALS_USER_AGENT",

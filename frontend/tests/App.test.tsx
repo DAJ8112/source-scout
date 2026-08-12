@@ -126,6 +126,36 @@ test("polls a scan and refreshes the ranked feed", async () => {
   await waitFor(() => expect(screen.getByText("Scan: success")).toBeInTheDocument());
 });
 
+test("surfaces partial scans and keeps their observed jobs available", async () => {
+  mockApi((url, method) => {
+    if (url === "/api/sources" && method === "GET") {
+      return response([{ ...source, health_status: "temporarily_failing" }]);
+    }
+    if (url === `/api/sources/${source.id}/scans` && method === "POST") return response({
+      id: "scan-partial", source_id: source.id, trigger: "manual", status: "queued", created_at: "",
+      started_at: null, finished_at: null, progress: {}, jobs_found: 0, jobs_persisted: 0,
+      jobs_created: 0, jobs_updated: 0, jobs_missing: 0, pages_visited: 0, warnings: [],
+      error_code: null, error_diagnostics: {},
+    }, 202);
+    if (url === "/api/scans/scan-partial" && method === "GET") return response({
+      id: "scan-partial", source_id: source.id, trigger: "manual", status: "partial", created_at: "",
+      started_at: "", finished_at: "", progress: { phase: "partial" }, jobs_found: 1,
+      jobs_persisted: 1, jobs_created: 1, jobs_updated: 0, jobs_missing: 0, pages_visited: 2,
+      warnings: [{ code: "incomplete_scan" }], error_code: null, error_diagnostics: {},
+    });
+    if (url.startsWith("/api/scans/scan-partial/jobs") && method === "GET") return response({
+      items: [], page: 1, page_size: 25, total: 0,
+    });
+  });
+  render(<App />);
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: "Scan now" }));
+  expect(await screen.findByText("Scan: partial", {}, { timeout: 2000 })).toBeInTheDocument();
+  expect(screen.getByText(/closure transitions were skipped/)).toBeInTheDocument();
+  expect(screen.getByText("temporarily failing")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Scan now" })).toBeEnabled();
+});
+
 test("saves a profile, runs matching, and renders explanations", async () => {
   const updatedProfile = { ...profile, resume_text: "Built Python pipelines.", target_roles: ["Data Engineer"], version: 2 };
   mockApi((url, method) => {

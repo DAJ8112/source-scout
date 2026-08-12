@@ -13,7 +13,7 @@ import type {
 } from "./api.types";
 import "./styles.css";
 
-const TERMINAL = new Set(["success", "success_with_warnings", "failed", "interrupted"]);
+const TERMINAL = new Set(["success", "success_with_warnings", "partial", "failed", "interrupted"]);
 
 function messageOf(value: unknown): string {
   if (value instanceof Error) return value.message;
@@ -191,7 +191,7 @@ function SourceCard({
       try {
         const next = await api.scan(scan.id);
         setScan(next);
-        if (next.status === "success" || next.status === "success_with_warnings") {
+        if (["success", "success_with_warnings", "partial"].includes(next.status)) {
           setJobs((await api.jobs(next.id)).items);
           await onScanComplete();
         }
@@ -294,6 +294,9 @@ function SourceCard({
             <small>
               {scan.jobs_created} created · {scan.jobs_updated} changed · {scan.jobs_missing} missing
             </small>
+          )}
+          {scan.status === "partial" && (
+            <small>Observed jobs were saved; missing-job and closure transitions were skipped.</small>
           )}
           {scan.error_code && <div role="alert" className="notice error">{scan.error_diagnostics.message ?? scan.error_code}</div>}
           {scan.warnings.length > 0 && <small>{scan.warnings.length} diagnostic warning(s)</small>}

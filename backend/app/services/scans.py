@@ -109,11 +109,20 @@ def enqueue_due_scans(session: Session, now: datetime | None = None) -> list[str
 
 
 def next_queued_scan_id(session: Session) -> str | None:
-    return session.scalar(
-        select(ScanRun.id)
-        .where(ScanRun.status == "queued")
-        .order_by(ScanRun.created_at, ScanRun.id)
-        .limit(1)
+    ids = next_queued_scan_ids(session, 1)
+    return ids[0] if ids else None
+
+
+def next_queued_scan_ids(session: Session, limit: int) -> list[str]:
+    if limit < 1:
+        return []
+    return list(
+        session.scalars(
+            select(ScanRun.id)
+            .where(ScanRun.status == "queued")
+            .order_by(ScanRun.created_at, ScanRun.id)
+            .limit(limit)
+        )
     )
 
 
@@ -164,7 +173,20 @@ async def execute_scan(scan_id: str, app) -> None:
             unique_jobs = {job_identity_key(job): job for job in output.jobs}
             scan.jobs_found = len(output.jobs)
             scan.pages_visited = output.pages_visited
-            scan.warnings = output.warnings
+            scan.warnings = list(output.warnings)
+            if not output.complete and not any(
+                warning.get("code") == "incomplete_scan" for warning in scan.warnings
+            ):
+                scan.warnings = [
+                    *scan.warnings,
+                    {
+                        "code": "incomplete_scan",
+                        "message": (
+                            "Traversal was incomplete; observed jobs were saved but absence "
+                            "transitions were skipped"
+                        ),
+                    },
+                ]
             scan.progress = {"phase": "persisting", "current": 0, "total": len(unique_jobs)}
             session.commit()
 
@@ -247,14 +269,17 @@ async def execute_scan(scan_id: str, app) -> None:
                     }
                     session.flush()
 
-            for job in current_jobs:
-                if job.id in observed_job_ids or job.lifecycle_status == "closed":
-                    continue
-                job.consecutive_successful_absences += 1
-                job.lifecycle_status = (
-                    "closed" if job.consecutive_successful_absences >= 2 else "possibly_closed"
-                )
-                scan.jobs_missing += 1
+            if output.complete:
+                for job in current_jobs:
+                    if job.id in observed_job_ids or job.lifecycle_status == "closed":
+                        continue
+                    job.consecutive_successful_absences += 1
+                    job.lifecycle_status = (
+                        "closed"
+                        if job.consecutive_successful_absences >= 2
+                        else "possibly_closed"
+                    )
+                    scan.jobs_missing += 1
 
             matcher = getattr(app.state, "matcher", None)
             if matcher:
@@ -278,16 +303,24 @@ async def execute_scan(scan_id: str, app) -> None:
                     ]
 
             scan.jobs_persisted = len(unique_jobs)
-            scan.status = "success_with_warnings" if scan.warnings else "success"
+            if not output.complete:
+                scan.status = "partial"
+            elif scan.warnings:
+                scan.status = "success_with_warnings"
+            else:
+                scan.status = "success"
             scan.progress = {
-                "phase": "complete",
+                "phase": "partial" if not output.complete else "complete",
                 "current": len(unique_jobs),
                 "total": len(unique_jobs),
             }
             scan.finished_at = datetime.now(UTC)
-            source.health_status = "healthy"
-            source.setup_status = "ready"
-            record_source_attempt(source, scan.finished_at, successful=True)
+            if output.complete:
+                source.health_status = "healthy"
+                source.setup_status = "ready"
+            else:
+                source.health_status = "temporarily_failing"
+            record_source_attempt(source, scan.finished_at, successful=output.complete)
             session.commit()
         except ConnectorError as exc:
             session.rollback()

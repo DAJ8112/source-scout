@@ -416,10 +416,15 @@ class HtmlJsonLdConnector(CareersConnector):
         cfg = {**self._config(config), "source_url": url}
         summaries, pages, warnings = await self.list_jobs(url, cfg)
         jobs: list[NormalizedJob] = []
+        complete = not any(
+            warning.get("code") in {"page_limit_reached", "pagination_loop"}
+            for warning in warnings
+        )
         for summary in summaries:
             try:
                 jobs.append(self.normalize(await self.get_job_details(summary, cfg)))
             except ConnectorError as exc:
+                complete = False
                 warnings.append(exc.as_dict())
         if not jobs:
             raise ConnectorError(
@@ -427,4 +432,16 @@ class HtmlJsonLdConnector(CareersConnector):
                 "No listing entries produced a valid JobPosting detail",
                 diagnostics={"listing_jobs": len(summaries), "warnings": warnings[-10:]},
             )
-        return ScanOutput(jobs=jobs, pages_visited=pages + len(summaries), warnings=warnings)
+        if not complete:
+            warnings.append(
+                {
+                    "code": "incomplete_scan",
+                    "message": "Traversal was incomplete; absence transitions must be skipped",
+                }
+            )
+        return ScanOutput(
+            jobs=jobs,
+            pages_visited=pages + len(summaries),
+            warnings=warnings,
+            complete=complete,
+        )

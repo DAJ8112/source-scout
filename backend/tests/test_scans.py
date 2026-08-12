@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 
 from sqlalchemy import create_engine, select
@@ -197,6 +198,86 @@ async def test_successful_scans_reconcile_job_lifecycle_and_failed_scans_do_not(
         assert job.lifecycle_status == "active"
         assert job.consecutive_successful_absences == 0
         assert session.get(ScanRun, failed_scan_id).status == "failed"
+
+
+async def test_partial_scan_persists_observed_jobs_without_absence_transitions(
+    tmp_path, monkeypatch
+):
+    factory = factory_for(tmp_path)
+    source_id, first_scan_id = source_and_scan(factory)
+
+    def normalized(external_id: str) -> NormalizedJob:
+        return NormalizedJob(
+            external_id=external_id,
+            canonical_url=f"https://careers.box.com/en/jobs/{external_id}/example",
+            title=f"Engineer {external_id}",
+            locations=["Remote"],
+            employment_type="FULL_TIME",
+            posted_date=None,
+            description_html=None,
+            description_text=None,
+            content_fingerprint=external_id.zfill(64),
+            raw_metadata={},
+        )
+
+    outputs = [
+        ScanOutput(jobs=[normalized("1")], pages_visited=1),
+        ScanOutput(
+            jobs=[normalized("2")],
+            pages_visited=2,
+            warnings=[{"code": "malformed_detail", "message": "One detail failed"}],
+            complete=False,
+        ),
+    ]
+
+    class FakeConnector:
+        async def scan(self, _url, _config):
+            return outputs.pop(0)
+
+    monkeypatch.setattr("app.services.scans.ConnectorRegistry.get", lambda *_args: FakeConnector())
+    app = SimpleNamespace(state=SimpleNamespace(session_factory=factory, http=None, scan_tasks={}))
+    await execute_scan(first_scan_id, app)
+    with factory() as session:
+        first_success = session.get(CareersSource, source_id).last_successful_scan_at
+
+    partial_scan_id = queued_scan(factory, source_id)
+    await execute_scan(partial_scan_id, app)
+
+    with factory() as session:
+        jobs = {job.external_id: job for job in session.scalars(select(Job)).all()}
+        partial = session.get(ScanRun, partial_scan_id)
+        source = session.get(CareersSource, source_id)
+        assert set(jobs) == {"1", "2"}
+        assert jobs["1"].lifecycle_status == "active"
+        assert jobs["1"].consecutive_successful_absences == 0
+        assert partial.status == "partial"
+        assert partial.jobs_persisted == 1
+        assert partial.jobs_missing == 0
+        assert any(warning["code"] == "incomplete_scan" for warning in partial.warnings)
+        assert source.health_status == "temporarily_failing"
+        assert source.last_successful_scan_at == first_success
+        assert source.last_scan_attempt_at > first_success
+
+
+async def test_duplicate_scan_claim_executes_connector_once(tmp_path, monkeypatch):
+    factory = factory_for(tmp_path)
+    _, scan_id = source_and_scan(factory)
+    calls = 0
+
+    class FakeConnector:
+        async def scan(self, _url, _config):
+            nonlocal calls
+            calls += 1
+            await asyncio.sleep(0)
+            return ScanOutput(jobs=[], pages_visited=1)
+
+    monkeypatch.setattr("app.services.scans.ConnectorRegistry.get", lambda *_args: FakeConnector())
+    app = SimpleNamespace(state=SimpleNamespace(session_factory=factory, http=None, scan_tasks={}))
+    await asyncio.gather(execute_scan(scan_id, app), execute_scan(scan_id, app))
+
+    assert calls == 1
+    with factory() as session:
+        assert session.get(ScanRun, scan_id).status == "success"
 
 
 async def test_jobs_discovered_after_initial_scan_are_not_initial_imports(tmp_path, monkeypatch):
