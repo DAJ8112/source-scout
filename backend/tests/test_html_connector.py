@@ -5,7 +5,12 @@ import respx
 from app.connectors.errors import ConnectorError
 from app.connectors.html_jsonld import HtmlJsonLdConnector, extract_jobposting
 from app.connectors.http import SafeHttpClient
-from app.connectors.registry import HAPPYDANCE_CONFIG, PHENOM_CONFIG
+from app.connectors.registry import (
+    EIGHTFOLD_CONFIG,
+    HAPPYDANCE_CONFIG,
+    KWIKTRIP_CONFIG,
+    PHENOM_CONFIG,
+)
 
 
 @respx.mock
@@ -96,6 +101,83 @@ def test_phenom_embedded_server_listing_is_configured():
         jobs[0].url
         == "https://jobs.veralto.com/global/en/job/TENANTR55EXTERNALENGLOBAL/R-D-Engineer"
     )
+
+
+@respx.mock
+async def test_modern_phenom_embedded_pagination_and_escaped_description(fixture_text):
+    source = "https://jobs.kwiktrip.com/us/en/"
+    listing = "https://jobs.kwiktrip.com/us/en/search-results"
+    respx.get("https://jobs.kwiktrip.com/robots.txt").mock(
+        return_value=httpx.Response(200, text="User-agent: *\nAllow: /")
+    )
+
+    def listing_response(request):
+        fixture = (
+            "phenom_modern/listing-2.html"
+            if request.url.params.get("from") == "2"
+            else "phenom_modern/listing-1.html"
+        )
+        return httpx.Response(200, text=fixture_text(fixture))
+
+    respx.get(url__startswith=listing).mock(side_effect=listing_response)
+    for route_id, req_id, title in [
+        ("TENANT101EXTERNALENUS", "101", "Data Engineer"),
+        ("TENANT102EXTERNALENUS", "102", "AI Engineer"),
+        ("TENANT103EXTERNALENUS", "103", "Platform Engineer"),
+    ]:
+        respx.get(f"https://jobs.kwiktrip.com/us/en/job/{route_id}/{title.replace(' ', '-')}").mock(
+            return_value=httpx.Response(
+                200,
+                text=fixture_text("phenom_modern/detail.html")
+                .replace('"101"', f'"{req_id}"')
+                .replace("Data Engineer", title),
+            )
+        )
+
+    http = SafeHttpClient(httpx.AsyncClient(), interval_seconds=0)
+    output = await HtmlJsonLdConnector(http, "phenom_kwiktrip", KWIKTRIP_CONFIG).scan(
+        source, {}
+    )
+    assert len(output.jobs) == 3
+    assert output.pages_visited == 5
+    assert output.jobs[0].description_html == "<p>Build reliable data products.</p>"
+    assert output.jobs[0].description_text == "Build reliable data products."
+    await http.close()
+
+
+@respx.mock
+async def test_eightfold_offset_pagination_and_jsonld(fixture_text):
+    source = "https://globalfoundries.eightfold.ai/careers"
+    respx.get("https://globalfoundries.eightfold.ai/robots.txt").mock(
+        return_value=httpx.Response(200, text="User-agent: *\nAllow: /")
+    )
+
+    def listing_response(request):
+        fixture = (
+            "eightfold/listing-2.html"
+            if request.url.params.get("start") == "2"
+            else "eightfold/listing-1.html"
+        )
+        return httpx.Response(200, text=fixture_text(fixture))
+
+    respx.get(
+        url__regex=r"^https://globalfoundries\.eightfold\.ai/careers(?:\?.*)?$"
+    ).mock(side_effect=listing_response)
+    for job_id in ("9001", "9002", "9003"):
+        respx.get(f"{source}/job/{job_id}").mock(
+            return_value=httpx.Response(
+                200,
+                text=fixture_text("eightfold/detail.html")
+                .replace("9001", job_id)
+                .replace("Data Scientist", f"Role {job_id}"),
+            )
+        )
+    config = {**EIGHTFOLD_CONFIG, "offset_pagination": {"parameter": "start", "page_size": 2}}
+    http = SafeHttpClient(httpx.AsyncClient(), interval_seconds=0)
+    output = await HtmlJsonLdConnector(http, "eightfold", config).scan(source, {})
+    assert [job.external_id for job in output.jobs] == ["9001", "9002", "9003"]
+    assert output.pages_visited == 5
+    await http.close()
 
 
 @respx.mock

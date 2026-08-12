@@ -12,6 +12,19 @@ SOURCE = "https://cvshealth.wd1.myworkdayjobs.com/CVS_Health_Careers"
 API = "https://cvshealth.wd1.myworkdayjobs.com/wday/cxs/cvshealth/CVS_Health_Careers/jobs"
 
 
+def test_workday_coordinates_support_recruiting_urls():
+    source = "https://wd3.myworkdaysite.com/recruiting/mdlz/External"
+    assert WorkdayConnector.coordinates(source) == (
+        "mdlz",
+        "External",
+        "https://wd3.myworkdaysite.com",
+    )
+    assert (
+        WorkdayConnector.api_url(source)
+        == "https://wd3.myworkdaysite.com/wday/cxs/mdlz/External/jobs"
+    )
+
+
 @respx.mock
 async def test_workday_validation_payload_facets_and_normalization(fixture_text):
     listing = json.loads(fixture_text("workday/listing.json"))

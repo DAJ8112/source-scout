@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
+from html import unescape
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from bs4 import BeautifulSoup
 
@@ -103,6 +104,27 @@ def _locations(value: Any) -> list[str]:
     return results
 
 
+def _nested(value: Any, path: list[str]) -> Any:
+    current = value
+    for key in path:
+        current = current.get(key) if isinstance(current, dict) else None
+    return current
+
+
+def _replace_query(url: str, values: dict[str, str]) -> str:
+    parts = urlsplit(url)
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    query.update(values)
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), ""))
+
+
+def _description_html(value: Any) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    decoded = unescape(value)
+    return decoded if re.search(r"<\s*[a-zA-Z][^>]*>", decoded) else value
+
+
 class HtmlJsonLdConnector(CareersConnector):
     connector_type = "paginated_html_jsonld"
 
@@ -125,14 +147,15 @@ class HtmlJsonLdConnector(CareersConnector):
         return {**self.defaults, **config}
 
     async def validate(self, url: str, config: dict[str, Any]) -> ValidationResult:
-        cfg = self._config(config)
-        allowed, warning = await self.http.robots_allowed(url)
+        cfg = {**self._config(config), "source_url": url}
+        listing_url = canonicalize_url(cfg.get("listing_url") or url, url, keep_query=True)
+        allowed, warning = await self.http.robots_allowed(listing_url)
         if not allowed:
             return ValidationResult(
                 valid=False, setup_status="setup_required", diagnostics=warning or {}
             )
-        response = await self.http.request("GET", url)
-        summaries, off_host = self._extract_summaries(response.text, url, cfg)
+        response = await self.http.request("GET", listing_url)
+        summaries, off_host = self._extract_summaries(response.text, listing_url, cfg)
         warnings = [warning] if warning else []
         if off_host:
             warnings.append(
@@ -155,7 +178,7 @@ class HtmlJsonLdConnector(CareersConnector):
         return ValidationResult(
             valid=True,
             setup_status="ready",
-            job_count=None,
+            job_count=self._embedded_total(response.text, cfg),
             sample_jobs=[{"title": item.title, "url": item.url} for item in summaries[:5]],
             warnings=warnings,
         )
@@ -174,19 +197,19 @@ class HtmlJsonLdConnector(CareersConnector):
             if not href:
                 continue
             candidate = canonicalize_url(href, page_url)
-            if not pattern.search(urlsplit(candidate).path):
+            detail_match = pattern.search(urlsplit(candidate).path)
+            if not detail_match:
                 continue
             if not traversal_allowed(candidate, source_url, allowed_paths):
                 off_host += 1
                 continue
             title = anchor.get_text(" ", strip=True) or None
-            result.append(RawJobSummary(external_id=None, url=candidate, title=title))
+            external_id = detail_match.groupdict().get("id")
+            result.append(RawJobSummary(external_id=external_id, url=candidate, title=title))
         marker = config.get("embedded_object_marker")
         if marker:
             embedded = extract_embedded_object(html, marker)
-            current: Any = embedded
-            for key in config.get("embedded_jobs_path", []):
-                current = current.get(key) if isinstance(current, dict) else None
+            current = _nested(embedded, config.get("embedded_jobs_path", []))
             if isinstance(current, list):
                 for item in current:
                     if not isinstance(item, dict):
@@ -212,6 +235,66 @@ class HtmlJsonLdConnector(CareersConnector):
         deduped = {item.url: item for item in result}
         return list(deduped.values()), off_host
 
+    def _embedded_total(self, html: str, config: dict[str, Any]) -> int | None:
+        pagination = config.get("embedded_pagination")
+        marker = config.get("embedded_object_marker")
+        if not pagination or not marker:
+            return None
+        embedded = extract_embedded_object(html, marker)
+        total = _nested(embedded, pagination.get("total_path", []))
+        try:
+            return int(total)
+        except TypeError, ValueError:
+            return None
+
+    def _generated_next_pages(
+        self,
+        html: str,
+        page_url: str,
+        config: dict[str, Any],
+        summaries: list[RawJobSummary],
+    ) -> list[str]:
+        embedded_pagination = config.get("embedded_pagination")
+        if embedded_pagination and config.get("embedded_object_marker"):
+            embedded = extract_embedded_object(html, config["embedded_object_marker"])
+            total = _nested(embedded, embedded_pagination.get("total_path", []))
+            page_size = _nested(embedded, embedded_pagination.get("page_size_path", []))
+            try:
+                total_value = int(total)
+                page_size_value = int(page_size)
+            except TypeError, ValueError:
+                return []
+            parameter = embedded_pagination.get("parameter", "from")
+            current = dict(parse_qsl(urlsplit(page_url).query)).get(parameter, "0")
+            try:
+                next_offset = int(current) + page_size_value
+            except ValueError:
+                return []
+            if page_size_value > 0 and next_offset < total_value:
+                values = {
+                    parameter: str(next_offset),
+                    **embedded_pagination.get("static_query", {}),
+                }
+                return [canonicalize_url(_replace_query(page_url, values), keep_query=True)]
+
+        offset_pagination = config.get("offset_pagination")
+        if offset_pagination:
+            page_size = int(offset_pagination["page_size"])
+            if len(summaries) < page_size:
+                return []
+            parameter = offset_pagination.get("parameter", "start")
+            current = dict(parse_qsl(urlsplit(page_url).query)).get(parameter, "0")
+            try:
+                next_offset = int(current) + page_size
+            except ValueError:
+                return []
+            return [
+                canonicalize_url(
+                    _replace_query(page_url, {parameter: str(next_offset)}), keep_query=True
+                )
+            ]
+        return []
+
     def _next_pages(self, html: str, page_url: str, config: dict) -> tuple[list[str], int]:
         soup = BeautifulSoup(html, "html.parser")
         selectors = config.get("pagination_selector", 'a[rel="next"], a[aria-label*="Next" i]')
@@ -231,7 +314,8 @@ class HtmlJsonLdConnector(CareersConnector):
         self, url: str, config: dict[str, Any]
     ) -> tuple[list[RawJobSummary], int, list[dict]]:
         cfg = {**self._config(config), "source_url": url}
-        queue = [canonicalize_url(url, keep_query=True)]
+        listing_url = canonicalize_url(cfg.get("listing_url") or url, url, keep_query=True)
+        queue = [listing_url]
         visited: set[str] = set()
         jobs: dict[str, RawJobSummary] = {}
         warnings: list[dict] = []
@@ -266,6 +350,8 @@ class HtmlJsonLdConnector(CareersConnector):
                 warnings.append({"code": "off_host_links_ignored", "count": off_host, "url": page})
             jobs.update({item.url: item for item in summaries})
             next_pages, rejected = self._next_pages(response.text, page, cfg)
+            next_pages.extend(self._generated_next_pages(response.text, page, cfg, summaries))
+            next_pages = list(dict.fromkeys(next_pages))
             if rejected:
                 warnings.append(
                     {"code": "unsafe_pagination_ignored", "count": rejected, "url": page}
@@ -309,13 +395,13 @@ class HtmlJsonLdConnector(CareersConnector):
         if isinstance(employment, list):
             employment = ", ".join(str(item) for item in employment)
         return RawJobDetails(
-            external_id=str(identifier) if identifier else None,
+            external_id=str(identifier or summary.external_id) if identifier or summary.external_id else None,
             url=canonicalize_url(canonical, summary.url),
             title=data.get("title") or summary.title or "Untitled role",
             locations=_locations(data.get("jobLocation")),
             employment_type=employment,
             posted_date=parse_date(data.get("datePosted")),
-            description_html=data.get("description"),
+            description_html=_description_html(data.get("description")),
             metadata={
                 "source": self.platform,
                 "identifier": identifier,
