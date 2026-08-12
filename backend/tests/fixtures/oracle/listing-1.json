@@ -1,0 +1,24 @@
+{
+  "items": [{
+    "TotalJobsCount": 3,
+    "Facets": [{"facetName": "LOCATIONS", "values": [{"name": "United States", "count": 3}]}],
+    "requisitionList": [
+      {
+        "Id": "146423",
+        "Title": "Lead Data Engineer",
+        "PostedDate": "2026-08-01",
+        "PrimaryLocation": "Atlanta, Georgia, United States",
+        "JobSchedule": "Full time"
+      },
+      {
+        "Id": "146424",
+        "Title": "Principal Software Engineer",
+        "PostedDate": "2026-08-02",
+        "PrimaryLocation": "Charlotte, North Carolina, United States",
+        "JobSchedule": "Full time"
+      }
+    ]
+  }],
+  "count": 1,
+  "hasMore": false
+}

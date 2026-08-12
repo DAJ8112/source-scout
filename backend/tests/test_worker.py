@@ -1,9 +1,11 @@
+import asyncio
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
+from app.config import Settings
 from app.connectors.types import ScanOutput
 from app.models import Base, CareersSource, ScanRun
 from app.services.scans import enqueue_due_scans, recover_interrupted_runs
@@ -16,6 +18,15 @@ def worker_factory(tmp_path):
     )
     Base.metadata.create_all(engine)
     return sessionmaker(bind=engine, expire_on_commit=False)
+
+
+def test_scan_concurrency_setting_defaults_and_honors_environment(monkeypatch):
+    monkeypatch.delenv("SCAN_CONCURRENCY", raising=False)
+    assert Settings().scan_concurrency == 3
+    monkeypatch.setenv("SCAN_CONCURRENCY", "7")
+    assert Settings().scan_concurrency == 7
+    monkeypatch.setenv("SCAN_CONCURRENCY", "0")
+    assert Settings().scan_concurrency == 1
 
 
 def add_source(
@@ -123,6 +134,39 @@ async def test_worker_drains_all_due_sources_before_becoming_idle(tmp_path, monk
     assert processed == 2
     with factory() as session:
         assert len(session.scalars(select(ScanRun)).all()) == 2
+
+
+async def test_worker_respects_cross_source_concurrency_limit(tmp_path, monkeypatch):
+    factory = worker_factory(tmp_path)
+    now = datetime.now(UTC)
+    for index in range(5):
+        add_source(factory, company=f"Concurrent{index}", due=now - timedelta(minutes=1))
+
+    active = 0
+    maximum = 0
+    first_batch_ready = asyncio.Event()
+
+    class FakeConnector:
+        async def scan(self, _url, _config):
+            nonlocal active, maximum
+            active += 1
+            maximum = max(maximum, active)
+            if active == 3:
+                first_batch_ready.set()
+            await asyncio.wait_for(first_batch_ready.wait(), timeout=1)
+            await asyncio.sleep(0)
+            active -= 1
+            return ScanOutput(jobs=[], pages_visited=1)
+
+    monkeypatch.setattr("app.services.scans.ConnectorRegistry.get", lambda *_args: FakeConnector())
+    runtime = SimpleNamespace(
+        state=SimpleNamespace(session_factory=factory, http=None, matcher=None, scan_tasks={})
+    )
+
+    processed = await drain_worker(runtime, now, concurrency=3)
+
+    assert processed == 5
+    assert maximum == 3
 
 
 def test_worker_recovery_preserves_queued_work_and_requeues_running_source(tmp_path):

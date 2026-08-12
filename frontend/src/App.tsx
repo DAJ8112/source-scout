@@ -13,7 +13,15 @@ import type {
 } from "./api.types";
 import "./styles.css";
 
-const TERMINAL = new Set(["success", "success_with_warnings", "failed", "interrupted"]);
+const TERMINAL = new Set(["success", "success_with_warnings", "partial", "failed", "interrupted"]);
+const THEME_STORAGE_KEY = "referral-monitor-theme";
+type Theme = "light" | "dark";
+
+function initialTheme(): Theme {
+  const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
+  if (saved === "light" || saved === "dark") return saved;
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
 
 function messageOf(value: unknown): string {
   if (value instanceof Error) return value.message;
@@ -191,7 +199,7 @@ function SourceCard({
       try {
         const next = await api.scan(scan.id);
         setScan(next);
-        if (next.status === "success" || next.status === "success_with_warnings") {
+        if (["success", "success_with_warnings", "partial"].includes(next.status)) {
           setJobs((await api.jobs(next.id)).items);
           await onScanComplete();
         }
@@ -294,6 +302,9 @@ function SourceCard({
             <small>
               {scan.jobs_created} created · {scan.jobs_updated} changed · {scan.jobs_missing} missing
             </small>
+          )}
+          {scan.status === "partial" && (
+            <small>Observed jobs were saved; missing-job and closure transitions were skipped.</small>
           )}
           {scan.error_code && <div role="alert" className="notice error">{scan.error_diagnostics.message ?? scan.error_code}</div>}
           {scan.warnings.length > 0 && <small>{scan.warnings.length} diagnostic warning(s)</small>}
@@ -435,6 +446,7 @@ function MatchFeed({
 }
 
 export default function App() {
+  const [theme, setTheme] = useState<Theme>(initialTheme);
   const [sources, setSources] = useState<Source[]>([]);
   const [company, setCompany] = useState("");
   const [url, setUrl] = useState("");
@@ -461,6 +473,12 @@ export default function App() {
     api.sources().then(setSources).catch((reason) => setError(messageOf(reason))).finally(() => setLoading(false));
     api.profile().then(setProfile).catch((reason) => setError(messageOf(reason)));
   }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [theme]);
 
   useEffect(() => {
     setFeedLoading(true);
@@ -547,7 +565,18 @@ export default function App() {
   return (
     <main>
       <header className="hero">
-        <p className="eyebrow">Referral monitor · Core MVP</p>
+        <div className="hero-topline">
+          <p className="eyebrow">Referral monitor · Core MVP</p>
+          <button
+            className="theme-toggle"
+            type="button"
+            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}
+          >
+            <span aria-hidden="true">{theme === "dark" ? "☀" : "☾"}</span>
+            {theme === "dark" ? "Light mode" : "Dark mode"}
+          </button>
+        </div>
         <h1>Jobs worth a referral, monitored at the source.</h1>
         <p>Track official careers pages, see what changed, and keep referral contacts beside every opportunity.</p>
       </header>

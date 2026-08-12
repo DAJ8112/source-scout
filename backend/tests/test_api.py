@@ -2,6 +2,8 @@ from collections.abc import Generator
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
+import httpx
+import respx
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -73,6 +75,35 @@ def test_jobs_pagination_returns_404_for_unknown_scan(tmp_path):
     app.dependency_overrides[get_session] = override_session
     with TestClient(app) as client:
         assert client.get("/api/scans/not-found/jobs").status_code == 404
+
+
+@respx.mock
+def test_bloomberg_406_is_visible_as_setup_required(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'api-bloomberg.db'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+
+    def override_session():
+        with factory() as session:
+            yield session
+
+    source_url = "https://bloomberg.avature.net/careers/SearchJobs"
+    respx.get("https://bloomberg.avature.net/robots.txt").mock(
+        return_value=httpx.Response(200, text="User-agent: *\nAllow: /")
+    )
+    respx.get(source_url).mock(return_value=httpx.Response(406))
+    app = create_app()
+    app.dependency_overrides[get_session] = override_session
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/sources", json={"company": "Bloomberg", "url": source_url}
+        )
+        assert created.status_code == 201
+        source = created.json()
+        assert source["connector_type"] == "avature_html"
+        result = client.post(f"/api/sources/{source['id']}/validate").json()
+        assert result["source"]["setup_status"] == "setup_required"
+        assert result["validation"]["diagnostics"]["code"] == "access_blocked"
 
 
 def test_manual_scan_is_dispatched_immediately_and_remains_durable(

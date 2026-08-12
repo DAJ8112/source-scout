@@ -12,7 +12,7 @@ from app.services.matching import HybridMatcher
 from app.services.scans import (
     enqueue_due_scans,
     execute_scan,
-    next_queued_scan_id,
+    next_queued_scan_ids,
     recover_interrupted_runs,
 )
 
@@ -31,19 +31,31 @@ def create_runtime():
 
 
 async def run_worker_once(runtime, now: datetime | None = None) -> bool:
+    return bool(await run_worker_batch(runtime, now, concurrency=1))
+
+
+async def run_worker_batch(
+    runtime,
+    now: datetime | None = None,
+    *,
+    concurrency: int | None = None,
+) -> int:
+    limit = max(1, concurrency or settings.scan_concurrency)
     with runtime.state.session_factory() as session:
         enqueue_due_scans(session, now)
-        scan_id = next_queued_scan_id(session)
-    if not scan_id:
-        return False
-    await execute_scan(scan_id, runtime)
-    return True
+        scan_ids = next_queued_scan_ids(session, limit)
+    if not scan_ids:
+        return 0
+    await asyncio.gather(*(execute_scan(scan_id, runtime) for scan_id in scan_ids))
+    return len(scan_ids)
 
 
-async def drain_worker(runtime, now: datetime | None = None) -> int:
+async def drain_worker(
+    runtime, now: datetime | None = None, *, concurrency: int | None = None
+) -> int:
     processed = 0
-    while await run_worker_once(runtime, now):
-        processed += 1
+    while batch_size := await run_worker_batch(runtime, now, concurrency=concurrency):
+        processed += batch_size
     return processed
 
 
@@ -55,7 +67,7 @@ async def worker_loop() -> None:
         logger.warning("Recovered %s interrupted scan(s)", recovered)
     try:
         while True:
-            worked = await run_worker_once(runtime)
+            worked = await run_worker_batch(runtime)
             if not worked:
                 await asyncio.sleep(settings.worker_poll_seconds)
     finally:

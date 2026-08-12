@@ -39,7 +39,7 @@ def normalized_job(details: RawJobDetails) -> NormalizedJob:
     title = clean_text(details.title) or "Untitled role"
     locations = sorted({item for raw in details.locations if (item := clean_text(raw))})
     description_text = html_to_text(details.description_html)
-    canonical_url = canonicalize_url(details.url)
+    canonical_url = canonicalize_url(details.url, keep_query=True)
     identity = {
         "title": title,
         "locations": locations,

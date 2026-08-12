@@ -64,3 +64,4 @@ class ScanOutput:
     jobs: list[NormalizedJob]
     pages_visited: int
     warnings: list[dict[str, Any]] = field(default_factory=list)
+    complete: bool = True

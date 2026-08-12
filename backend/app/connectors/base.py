@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
+from app.connectors.errors import ConnectorError
 from app.connectors.types import (
     DetectionResult,
     NormalizedJob,
@@ -38,5 +39,34 @@ class CareersConnector(ABC):
 
     async def scan(self, url: str, config: dict[str, Any]) -> ScanOutput:
         summaries, pages, warnings = await self.list_jobs(url, config)
-        jobs = [self.normalize(await self.get_job_details(item, config)) for item in summaries]
-        return ScanOutput(jobs=jobs, pages_visited=pages, warnings=warnings)
+        warnings = list(warnings)
+        jobs: list[NormalizedJob] = []
+        complete = not any(
+            warning.get("code") in {"page_limit_reached", "pagination_loop"}
+            for warning in warnings
+        )
+        for summary in summaries:
+            try:
+                jobs.append(self.normalize(await self.get_job_details(summary, config)))
+            except ConnectorError as exc:
+                complete = False
+                warnings.append(exc.as_dict())
+        if summaries and not jobs:
+            raise ConnectorError(
+                "detail_extraction_failure",
+                "No listing entries produced a usable job detail",
+                diagnostics={"listing_jobs": len(summaries), "warnings": warnings[-10:]},
+            )
+        if not complete:
+            warnings.append(
+                {
+                    "code": "incomplete_scan",
+                    "message": "Traversal was incomplete; absence transitions must be skipped",
+                }
+            )
+        return ScanOutput(
+            jobs=jobs,
+            pages_visited=pages,
+            warnings=warnings,
+            complete=complete,
+        )

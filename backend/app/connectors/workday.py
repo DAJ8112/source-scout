@@ -52,10 +52,20 @@ class WorkdayConnector(CareersConnector):
     @staticmethod
     def coordinates(url: str) -> tuple[str, str, str]:
         parts = urlsplit(url)
-        if not parts.hostname or ".myworkdayjobs.com" not in parts.hostname:
+        host = (parts.hostname or "").lower()
+        path_parts = [part for part in parts.path.split("/") if part]
+        if ".myworkdayjobs.com" in host:
+            tenant = host.split(".")[0]
+            site = path_parts[0] if path_parts else ""
+        elif ".myworkdaysite.com" in host:
+            if len(path_parts) < 3 or path_parts[0].casefold() != "recruiting":
+                raise ConnectorError(
+                    "invalid_workday_url",
+                    "Workday recruiting URL must include /recruiting/{tenant}/{site}",
+                )
+            tenant, site = path_parts[1:3]
+        else:
             raise ConnectorError("invalid_workday_url", "URL is not a Workday careers site")
-        tenant = parts.hostname.split(".")[0]
-        site = next((part for part in parts.path.split("/") if part), "")
         if not site:
             raise ConnectorError("invalid_workday_url", "Workday URL is missing the site name")
         origin = f"{parts.scheme}://{parts.netloc}"
