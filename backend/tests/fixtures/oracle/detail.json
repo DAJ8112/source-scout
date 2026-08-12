@@ -1,0 +1,15 @@
+{
+  "items": [{
+    "Id": "146423",
+    "Title": "Lead Data Engineer",
+    "ExternalPostedStartDate": "2026-08-01T00:00:00Z",
+    "ExternalDescriptionStr": "<p>Build reliable enterprise data products.</p>",
+    "ExternalResponsibilitiesStr": "Lead platform delivery.",
+    "ExternalQualificationsStr": "Experience with distributed systems.",
+    "JobSchedule": "Full time",
+    "JobFamily": "Technology",
+    "PrimaryLocation": "Atlanta, Georgia, United States",
+    "secondaryLocations": [{"LocationName": "Phoenix, Arizona, United States"}],
+    "workLocation": {"TownOrCity": "Atlanta", "Region2": "Georgia", "Country": "United States"}
+  }]
+}

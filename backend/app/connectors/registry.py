@@ -6,6 +6,8 @@ from app.connectors.base import CareersConnector
 from app.connectors.errors import ConnectorError
 from app.connectors.html_jsonld import HtmlJsonLdConnector
 from app.connectors.http import SafeHttpClient
+from app.connectors.icims_jibe import IcimsJibeConnector
+from app.connectors.oracle_ce import OracleCeConnector
 from app.connectors.types import DetectionResult
 from app.connectors.workday import WorkdayConnector
 
@@ -86,10 +88,14 @@ class ConnectorRegistry:
             connector = HtmlJsonLdConnector(self.http, "phenom_toyota", TOYOTA_CONFIG)
         elif host == "globalfoundries.eightfold.ai" and path.startswith("/careers"):
             connector = HtmlJsonLdConnector(self.http, "eightfold", EIGHTFOLD_CONFIG)
+        elif host == "careers.rivian.com" and path.startswith("/careers-home/jobs"):
+            connector = IcimsJibeConnector(self.http)
+        elif host == "careers.honeywell.com" or host.endswith(".fa.oraclecloud.com"):
+            connector = OracleCeConnector(self.http)
         else:
             raise ConnectorError(
                 "unsupported_source",
-                "No Milestone 1 connector matches this official careers URL",
+                "No connector matches this official careers URL",
                 diagnostics={"host": host, "path": parts.path},
             )
         return connector, await connector.detect(url)
@@ -107,6 +113,10 @@ class ConnectorRegistry:
             return HtmlJsonLdConnector(self.http, "phenom_toyota", TOYOTA_CONFIG)
         if connector_type == "paginated_html_jsonld" and platform == "eightfold":
             return HtmlJsonLdConnector(self.http, "eightfold", EIGHTFOLD_CONFIG)
+        if connector_type == "icims_jibe_api":
+            return IcimsJibeConnector(self.http)
+        if connector_type == "oracle_ce_rest":
+            return OracleCeConnector(self.http)
         raise ConnectorError("unsupported_connector", f"Unknown connector {connector_type!r}")
 
 

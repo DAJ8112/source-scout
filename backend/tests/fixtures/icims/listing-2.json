@@ -1,0 +1,18 @@
+{
+  "count": 1,
+  "totalCount": 3,
+  "filter": {},
+  "jobs": [
+    {
+      "data": {
+        "req_id": "RIV-103",
+        "title": "Cloud Platform Engineer",
+        "description": "Operate the cloud platform.",
+        "full_location": "Remote, United States",
+        "employment_type": "Full-time",
+        "posted_date": "2026-08-03",
+        "meta_data": {"canonical_url": "/careers-home/jobs/30103"}
+      }
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "count": 2,
+  "totalCount": 3,
+  "filter": {
+    "categories": [{"name": "Software", "count": 2}],
+    "locations": [{"name": "California", "count": 1}]
+  },
+  "jobs": [
+    {
+      "data": {
+        "req_id": "RIV-101",
+        "title": "Senior Data Engineer",
+        "description": "Build reliable vehicle data products.",
+        "full_location": "Palo Alto, California, United States",
+        "employment_type": "Full-time",
+        "posted_date": "2026-08-01T00:00:00Z",
+        "update_date": "2026-08-05T00:00:00Z",
+        "category": "Software Engineering",
+        "meta_data": {"canonical_url": "/careers-home/jobs/30101"}
+      }
+    },
+    {
+      "data": {
+        "req_id": "RIV-102",
+        "title": "Machine Learning Engineer",
+        "description": "Develop perception models.",
+        "full_location": "Normal, Illinois, United States",
+        "employment_type": "Full-time",
+        "posted_date": "2026-08-02",
+        "meta_data": {"canonical_url": "https://careers.rivian.com/careers-home/jobs/30102?utm_source=test"}
+      }
+    }
+  ]
+}

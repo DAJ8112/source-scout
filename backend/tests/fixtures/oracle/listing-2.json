@@ -1,0 +1,14 @@
+{
+  "items": [{
+    "TotalJobsCount": 3,
+    "requisitionList": [
+      {
+        "Id": "146425",
+        "Title": "Data Scientist",
+        "PostedDate": "2026-08-03",
+        "PrimaryLocation": "Remote, United States",
+        "JobSchedule": "Full time"
+      }
+    ]
+  }]
+}
