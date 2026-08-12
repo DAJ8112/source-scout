@@ -1,8 +1,8 @@
 @import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700&display=swap");
 
-:root { font-family: "DM Sans", sans-serif; color: #18322c; background: #f2f5ef; font-synthesis: none; }
+:root { font-family: "DM Sans", sans-serif; color: #18322c; background: #f2f5ef; color-scheme: light; font-synthesis: none; }
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; }
+body { margin: 0; min-width: 320px; background: #f2f5ef; transition: background-color .2s ease, color .2s ease; }
 button, input, select, textarea { font: inherit; }
 button { border: 0; border-radius: 999px; padding: .72rem 1.15rem; background: #0f6b57; color: white; font-weight: 700; cursor: pointer; }
 button:hover { background: #0a5545; }
@@ -12,6 +12,10 @@ button.text-button { background: transparent; color: #8a341c; padding: .35rem; f
 a { color: #0d6854; }
 main { width: min(1100px, calc(100% - 2rem)); margin: 0 auto 5rem; }
 .hero { padding: 5rem 0 3rem; max-width: 780px; }
+.hero-topline { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.hero-topline .eyebrow { margin: 0; }
+.theme-toggle { display: inline-flex; align-items: center; gap: .45rem; padding: .52rem .8rem; background: #e4eee8; color: #174e41; font-size: .78rem; white-space: nowrap; }
+.theme-toggle:hover { background: #d5e4db; }
 .hero h1 { font: 700 clamp(2.6rem, 7vw, 5.7rem)/.98 "Manrope", sans-serif; letter-spacing: -.06em; margin: .5rem 0 1.4rem; }
 .hero > p:last-child { max-width: 650px; font-size: 1.15rem; color: #537068; line-height: 1.6; }
 .eyebrow { text-transform: uppercase; letter-spacing: .16em; font-weight: 700; color: #c25635; font-size: .75rem; }
@@ -89,4 +93,34 @@ fieldset { border: 1px solid #dce4dd; border-radius: 12px; margin: 1rem 0; }
 .contact-list li div { display: grid; gap: .2rem; }
 .contact-list span { color: #708078; font-size: .84rem; }
 .contact-form { display: grid; grid-template-columns: 1fr 1.5fr 1.5fr auto; gap: .6rem; align-items: end; margin-top: .8rem; }
-@media (max-width: 700px) { .onboarding form, .contact-form, .profile-form, .resume-upload { grid-template-columns: 1fr; } .profile-form .wide { grid-column: auto; } .metadata { grid-template-columns: 1fr; gap: .7rem; } .hero { padding-top: 3rem; } }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid #4f9f8a; outline-offset: 2px; }
+
+:root[data-theme="dark"] { color: #e5f0ea; background: #10201c; color-scheme: dark; }
+:root[data-theme="dark"] body { background: #10201c; color: #e5f0ea; }
+:root[data-theme="dark"] button { background: #48b696; color: #10201c; }
+:root[data-theme="dark"] button:hover { background: #6bc9ad; }
+:root[data-theme="dark"] button.secondary, :root[data-theme="dark"] .theme-toggle { background: #1e3730; color: #d5f5e9; }
+:root[data-theme="dark"] button.secondary:hover, :root[data-theme="dark"] .theme-toggle:hover { background: #29483e; }
+:root[data-theme="dark"] button.text-button { background: transparent; color: #ffb8a7; }
+:root[data-theme="dark"] a { color: #82d9bf; }
+:root[data-theme="dark"] .hero > p:last-child { color: #c1d0c8; }
+:root[data-theme="dark"] .eyebrow { color: #f19a78; }
+:root[data-theme="dark"] .onboarding, :root[data-theme="dark"] .source-card, :root[data-theme="dark"] .inventory, :root[data-theme="dark"] .profile-panel { background: #172b25; border-color: #38554b; box-shadow: 0 15px 50px rgba(0, 0, 0, .26); }
+:root[data-theme="dark"] input[type="text"], :root[data-theme="dark"] input[type="url"], :root[data-theme="dark"] label > input:not([type]), :root[data-theme="dark"] select, :root[data-theme="dark"] textarea { border-color: #4a685d; color: #e5f0ea; background: #132720; }
+:root[data-theme="dark"] .resume-upload, :root[data-theme="dark"] .metadata, :root[data-theme="dark"] .contact-list li { background: #1e3730; }
+:root[data-theme="dark"] .resume-upload small, :root[data-theme="dark"] .profile-actions small, :root[data-theme="dark"] .facet small, :root[data-theme="dark"] .jobs span, :root[data-theme="dark"] .empty, :root[data-theme="dark"] .job-card p, :root[data-theme="dark"] .job-meta, :root[data-theme="dark"] .contact-list span { color: #aabbb3; }
+:root[data-theme="dark"] .metadata dt { color: #aabbb3; }
+:root[data-theme="dark"] fieldset { border-color: #38554b; }
+:root[data-theme="dark"] .status, :root[data-theme="dark"] .match-irrelevant { background: #293f37; color: #c1d0c8; }
+:root[data-theme="dark"] .status-healthy, :root[data-theme="dark"] .success, :root[data-theme="dark"] .feed-summary .provider-ready, :root[data-theme="dark"] .match-strong { background: #1d4b3c; color: #9ae5c6; }
+:root[data-theme="dark"] .status-setup_required, :root[data-theme="dark"] .status-temporarily_failing, :root[data-theme="dark"] .error { background: #542e29; color: #ffb8a7; }
+:root[data-theme="dark"] .warning, :root[data-theme="dark"] .feed-summary .provider-fallback, :root[data-theme="dark"] .match-possible { background: #54431e; color: #ffe09a; }
+:root[data-theme="dark"] .scan, :root[data-theme="dark"] .jobs li, :root[data-theme="dark"] .job-contacts, :root[data-theme="dark"] .contacts { border-color: #314c43; }
+:root[data-theme="dark"] .feed-summary > span, :root[data-theme="dark"] .job-card.job-dismissed { background: #213b33; }
+:root[data-theme="dark"] .job-card { border-color: #38554b; background: #132720; }
+:root[data-theme="dark"] .job-labels { color: #c1d0c8; }
+:root[data-theme="dark"] .match-unmatched { background: #293b59; color: #c8d9ff; }
+:root[data-theme="dark"] .match-reasons { color: #b9eedb; }
+:root[data-theme="dark"] .match-gaps { color: #ffe09a; }
+
+@media (max-width: 700px) { .onboarding form, .contact-form, .profile-form, .resume-upload { grid-template-columns: 1fr; } .profile-form .wide { grid-column: auto; } .metadata { grid-template-columns: 1fr; gap: .7rem; } .hero { padding-top: 3rem; } .hero-topline { align-items: start; } }

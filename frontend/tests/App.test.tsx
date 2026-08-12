@@ -270,3 +270,14 @@ test("pauses source monitoring", async () => {
   expect(await screen.findByRole("button", { name: "Resume monitoring" })).toBeInTheDocument();
   expect(screen.getByText("Paused")).toBeInTheDocument();
 });
+
+test("switches themes and remembers the selected mode", async () => {
+  window.localStorage.removeItem("referral-monitor-theme");
+  mockApi();
+  render(<App />);
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "Switch to dark mode" }));
+  expect(document.documentElement.dataset.theme).toBe("dark");
+  expect(window.localStorage.getItem("referral-monitor-theme")).toBe("dark");
+  expect(screen.getByRole("button", { name: "Switch to light mode" })).toBeInTheDocument();
+});
